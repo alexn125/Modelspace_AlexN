@@ -1,0 +1,8 @@
+    {
+    "mass" : "0.0",                    
+    "peak_battery_voltage" : "100.0",    
+    "single_battery_capacity" : "100.0", 
+    "shutoff_capacity" : "0.0",        
+    "num_batteries_series" : "1",      
+    "num_batteries_parallel" : "0"
+    }

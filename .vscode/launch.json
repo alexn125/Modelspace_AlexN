@@ -1,0 +1,15 @@
+{
+    "version": "1.0.0",
+    "configurations": [
+        {
+            "name": "Python: Current File",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${file}",
+            "console": "internalConsole",
+            "cwd": "${fileDirname}",
+            "env": {"PYTHONPATH":"${workspaceFolder}/build:${workspaceFolder}/python:${workspaceFolder}"},
+            "args": ["-i"]
+        }
+    ]
+}

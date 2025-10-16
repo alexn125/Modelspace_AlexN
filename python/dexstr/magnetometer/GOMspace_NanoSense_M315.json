@@ -1,0 +1,13 @@
+{
+    "Source 1" : "NASA State of the Art",
+    "Source 2" : "https://gomspace.com/shop/subsystems/attitude-orbit-control-systems/nanosense-m315.aspx",
+    "mass" : "0.008",                               "//comment1" : "Source 1 and Source 2 section 2.1",
+    "operational_power_draw" : "1.155",             "//comment2" : "Source 2 section 5 and 7 : typical_supply_voltage*sampling_current*max_sample_frequency/1000 = 3.3*2.5*140/1000",
+    "resolution" : "1.525",                         "//comment3" : "UNITS = nT : Source 2 section 7 : meas_range/2^(bits_per_meas) = 1600/2^20 ~ assumed a 20 bit analog to digital converter",
+    "bias_initial" : "[0.0, 0.0, 0.0]",             "//comment4" : "Safe to assume no initial bias",
+    "min_mag_field_strength" : "-800000.0",         "//comment5" : "UNITS = nT : Source 2 section 7",
+    "max_mag_field_strength" : "800000.0",          "//comment6" : "UNITS = nT : Source 2 section 7",
+    "gaussian_noise" : "[15.0, 15.0, 15.0]",        "//comment7" : "UNITS = nT : Source 2 section 7",
+    "walking_bias_std" : "[0.0, 0.0, 0.0]",         "//comment8" : "UNITS = nT : Safe to assume magnetometers do not have bias drift",
+    "scale_factor_std" : "[0.0, 0.0, 0.0]",         "//comment9" : "UNITS = nT : Safe to assume there is negligable scale noise"
+}

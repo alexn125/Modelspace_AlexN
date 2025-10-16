@@ -1,0 +1,29 @@
+{
+    "terminal.integrated.env.linux": {
+        "PYTHONPATH": "${workspaceFolder}/build:${workspaceFolder}/python:${workspaceFolder}"
+    },
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/build",
+        "${workspaceFolder}/python",
+        "${workspaceFolder}"
+    ],
+    "files.autoSave": "onFocusChange",
+
+    // Make VS Code include git-ignored files in search so local_modelspace (git-ignored) is visible in Quick Open
+    "search.useIgnoreFiles": false,
+    "search.useGlobalIgnoreFiles": false,
+    "search.followSymlinks": true,
+    "search.exclude": {
+        "**/local_modelspace": false,
+        "**/local_modelspace/**": false
+    },
+
+    "files.exclude": {
+        "**/.git": true,
+        "**/.DS_Store": true,
+        "local_modelspace": false
+    },
+
+    // Local folder name used by the helper script
+    "modelspace.localFolder": "local_modelspace"
+}

@@ -1,0 +1,8 @@
+{
+    "mass" : "0.0",
+    "operational_power_draw" : "0.0",
+    "pos_gaussian_noise" : "[0.0, 0.0, 0.0]",
+    "vel_gaussian_noise" : "[0.0, 0.0, 0.0]",
+    "pos_walking_bias_std" : "[0.0, 0.0, 0.0]",
+    "vel_walking_bias_std" : "[0.0, 0.0, 0.0]"
+}

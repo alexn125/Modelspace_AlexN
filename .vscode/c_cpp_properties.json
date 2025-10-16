@@ -1,0 +1,13 @@
+{
+    "configurations": [
+        {
+            "name": "ms-build",
+            "includePath": [
+                "${workspaceFolder}/**",
+                "${workspaceFolder}/src",
+                "/usr/include/modelspace"
+            ]
+        }
+    ],
+    "version": 4
+}

@@ -1,0 +1,10 @@
+{
+    "Source 1" : "NASA State of the Art",
+    "Source 2" : "https://gomspace.com/shop/subsystems/attitude-orbit-control-systems/gps-kit.aspx",
+    "mass" : "0.222",                                   "//comment1" : "Source 2, 31g module + 191g reciever+antenna+mount",
+    "operational_power_draw" : "0.9",                   "//comment2" : "Source 1",
+    "pos_gaussian_noise" : "[1.5, 1.5, 1.5]",           "//comment3" : "Source 2 section 3",
+    "vel_gaussian_noise" : "[0.03, 0.03, 0.03]",        "//comment4" : "Source 2 section 3",
+    "pos_walking_bias_std" : "[0.0, 0.0, 0.0]",         "//comment5" : "GPS clock discliplined so there is generally no bias drift",
+    "vel_walking_bias_std" : "[0.0, 0.0, 0.0]",         "//comment6" : "GPS clock discliplined so there is generally no bias drift"
+}

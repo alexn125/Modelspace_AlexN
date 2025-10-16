@@ -1,0 +1,11 @@
+{
+    "Source 1" : "NASA State of the Art",
+    "Source 2" : "https://gomspace.com/shop/subsystems/power/nanopower-bp4.aspx",
+    "Source 3" : "https://www.18650batterystore.com/collections/18650-batteries",
+    "mass" : "0.270",                       "\\comment1" : "Section 2.1 of source 2",
+    "peak_battery_voltage" : "4.2",         "\\comment2" : "Section 2.2 of source 2 ~ peak_voltage/num_series = 8.4/2 ; Also fully charged voltage in source 3",
+    "single_battery_capacity" : "10.75",    "\\comment3" : "Section 2.2 of source 2 ~ nominal_Wh/num_batteries = 43/4 ; Also nominal_Ah*nominal_V_per_battery/num_series = 6*3.6/2",
+    "shutoff_capacity" : "0.05",            "\\comment4" : "Comes from lithium ion capacity curves and the 2 volt cut-off value from source 3",
+    "num_batteries_series" : "4",           "\\comment5" : "Obvious from name",
+    "num_batteries_parallel" : "1",         "\\comment6" : "Obvious from name"
+}

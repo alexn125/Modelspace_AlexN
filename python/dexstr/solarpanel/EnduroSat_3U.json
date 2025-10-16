@@ -1,0 +1,5 @@
+{
+    "Source 1" : "https://www.endurosat.com/products/3u-solar-panel/",
+    "panel_eff" : "0.29",           "\\comment1" : "Source 1 Used the end-of-life (EOL) power efficiency",
+    "mass" : "0.147",               "\\comment2" : "Source 1"
+}

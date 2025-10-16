@@ -1,0 +1,106 @@
+/******************************************************************************
+* Copyright (c) ATTX LLC 2024. All Rights Reserved.
+*
+* This software and associated documentation (the "Software") are the 
+* proprietary and confidential information of ATTX, LLC. The Software is 
+* furnished under a license agreement between ATTX and the user organization 
+* and may be used or copied only in accordance with the terms of the agreement.
+* Refer to 'license/attx_license.adoc' for standard license terms.
+*
+* EXPORT CONTROL NOTICE: THIS SOFTWARE MAY INCLUDE CONTENT CONTROLLED UNDER THE
+* INTERNATIONAL TRAFFIC IN ARMS REGULATIONS (ITAR) OR THE EXPORT ADMINISTRATION 
+* REGULATIONS (EAR99). No part of the Software may be used, reproduced, or 
+* transmitted in any form or by any means, for any purpose, without the express 
+* written permission of ATTX, LLC.
+******************************************************************************/
+// THIS IS AN AUTO-GENERATED FILE AND SHOULD NOT BE MODIFIED UNDER 
+// ANY CIRCUMSTANCES.
+// LOOKING TO CUSTOM-CONFIGURE SWIG BUILDING FOR YOUR MODEL, EVENT,
+// MONITOR, or TASK? Create a .i file in the swig_manual directory
+// with the same (ModelName) .i as the model file and the custom
+// compiler will not auto-generate in favor of the manual model .i
+
+/* File : <<ItemName>>.i */
+%module <<ItemName>>
+#pragma SWIG nowarn=302,509,362
+
+// Set classes to ignore -- generally ModelSpacePy code which is already
+// SWIG wrapped elsewhere and would be duplicated.
+%ignore cfspp::FlightExecutive;
+%ignore cfspp::OS;
+%ignore cfspp::Platform;
+%ignore cfspp::Setup;
+%ignore cfspp::Scheduler;
+%ignore clockwerk::Time;
+%ignore clockwerk::GraphTreeObject;
+%ignore clockwerk::DataIOBase;
+%ignore clockwerk::TimeManager;
+%ignore clockwerk::SimLogger;
+%ignore clockwerk::Matrix;
+%ignore clockwerk::CartesianVector;
+%ignore clockwerk::dot;
+%ignore clockwerk::cross;
+%ignore clockwerk::Quaternion;
+%ignore clockwerk::MRP;
+%ignore clockwerk::Euler321;
+%ignore clockwerk::DCM;
+%ignore modelspace::Joint;
+%ignore modelspace::Frame;
+%ignore modelspace::Body;
+%ignore modelspace::Node;
+%ignore modelspace::getFrameRelativeDCM;
+%ignore modelspace::FrameRotate;
+%ignore modelspace::FramePositionTransform;
+%ignore modelspace::FrameVelocityTransform;
+%ignore modelspace::getCompositeRotation;
+%ignore modelspace::getCompositeRotationQuat;
+%ignore clockwerk::DataIO;
+%ignore clockwerk::connectSignals;
+%ignore clockwerk::disconnect;
+%ignore modelspace::SpiceManager;
+%ignore modelspace::loadKernel;
+%ignore modelspace::Dispersion;
+%ignore modelspace::UniformDispersion;
+%ignore modelspace::NormalDispersion;
+%ignore modelspace::DispersionEngine;
+%ignore modelspace::SimTimeManager;
+%ignore modelspace::SimulationExecutive;
+%ignore modelspace::ArgParser;
+%ignore modelspace::frameRelativeInit;
+%ignore modelspace::orbitInit;
+%ignore modelspace::CsvLogger;
+%ignore modelspace::Hdf5Logger;
+%ignore modelspace::LogManager;
+%ignore std::array;
+%ignore std::vector;
+
+// Include other pre-defined modules
+%include <std_string.i>
+%include "<<ClockwerkSwigPath>>/ModelSpacePy.i"
+%{
+%}
+%include "core/mathmacros.h"
+%include "flight/appmacros.h"
+
+%feature("flatnested", "3");
+
+%rename (<<ItemName>>_Params) <<NamespaceName>><<ItemName>>::Params;
+%rename (<<ItemName>>_Inputs) <<NamespaceName>><<ItemName>>::Inputs;
+%rename (<<ItemName>>_Outputs) <<NamespaceName>><<ItemName>>::Outputs;
+
+//         Signal name          Type                Default
+START_PARAMS <<ItemParamsContent>>};
+
+START_INPUTS <<ItemInputsContent>>};
+
+START_OUTPUTS <<ItemOutputsContent>>};
+
+%{
+#include "<<IncludeDir>>"
+%}
+%include "<<IncludeDir>>"
+%{
+typedef <<NamespaceName>><<ItemName>>::Params Params;
+typedef <<NamespaceName>><<ItemName>>::Inputs Inputs;
+typedef <<NamespaceName>><<ItemName>>::Outputs Outputs;
+%}

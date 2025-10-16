@@ -1,0 +1,11 @@
+{
+    "mass" : "0.0",
+    "operational_power_draw" : "0.0",
+    "resolution" : "0.0",
+    "bias_initial" : "[0.0, 0.0, 0.0]",
+    "min_mag_field_strength" : "-9000000.0",
+    "max_mag_field_strength" : "9000000.0",
+    "gaussian_noise" : "[0.0, 0.0, 0.0]",
+    "walking_bias_std" : "[0.0, 0.0, 0.0]",
+    "scale_factor_std" : "[0.0, 0.0, 0.0]"
+}

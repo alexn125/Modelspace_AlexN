@@ -1,0 +1,19 @@
+{
+    "accelerometer_bias_initial" : "[0.0, 0.0, 0.0]",
+    "min_acceleration" : "-1000.0",
+    "max_acceleration" : "1000.0",
+    "gyroscope_bias_initial" : "[0.0, 0.0, 0.0]",
+    "min_ang_vel" : "-1000.0",
+    "max_ang_vel" : "1000.0",
+    "accelerometer_resolution" : "0.0",
+    "gyroscope_resolution" : "0.0",
+    "accelerometer_operational_power_draw" : "0.0",
+    "gyro_operational_power_draw" : "0.0",
+    "mass" : "0.0",
+    "accelerometer_gaussian_noise" : "[0.0, 0.0, 0.0]",
+    "accelerometer_walking_bias_std" : "[0.0, 0.0, 0.0]",
+    "accelerometer_scale_factor_std" : "[0.0, 0.0, 0.0]",
+    "gyroscope_gaussian_noise" : "[0.0, 0.0, 0.0]",
+    "gyroscope_walking_bias_std" : "[0.0, 0.0, 0.0]",
+    "gyroscope_scale_factor_std" : "[0.0, 0.0, 0.0]"
+}
