@@ -33,7 +33,7 @@ from modelspace.ModelSpacePy import CartesianVector3, CartesianVector4, Matrix6,
 # Data IO
 from modelspace.ModelSpacePy import DataIOBase, DataIOMatrix3DPtr
 # Visuals
-# from modelspaceutils.vizkit.VizKitPlanetRelative import VizKitPlanetRelative
+from modelspaceutils.vizkit.VizKitPlanetRelative import VizKitPlanetRelative
 # Planet relative states model
 # from modelspace.PlanetRelativeStatesModel import PlanetRelativeStatesModel
 # Frame state sensor model
@@ -53,7 +53,7 @@ exc.setRateHz(10)
 exc.end(10.0)
 
 ## Create Planet and Sun
-earth = CustomPlanet(exc, "earth")
+earth = SpicePlanet(exc, "earth")
 sun = SpicePlanet(exc, "sun")
 
 "-------------------------------------------------------------------------------------------------------------------------------"
@@ -98,9 +98,9 @@ with open('INIT_TLE.txt','r') as f:
     f.close() 
 
 ## Calculate remaining elements
-mu1 = earth.params.mu()
-semimajoraxis = (mu1/(meanmot*meanmot))**(1/3)
+semimajoraxis = (earth.outputs.mu()/meanmot*meanmot)**(1/3)
 
+print(semimajoraxis)
 ## Newton-Raphson to calculate eccentric anomaly
 max_iterations = 100
 tolerance = 1e-14
@@ -272,6 +272,15 @@ exc.logManager().addLog(navout, Time(1))
 
 "Visuals -----------------------------------------------------------------------------------------------------------------------"
 ## Visuals (if on)
+
+vk_planet_rel = VizKitPlanetRelative(exc)
+connectSignals(earth.outputs.inertial_frame, vk_planet_rel.planet)
+connectSignals(sc.outputs.body, vk_planet_rel.target)
+
+vk_planet_rel_rate = Time()
+vk_planet_rel_rate.fromDouble(10.0)
+exc.logManager().addLog(vk_planet_rel, vk_planet_rel_rate)
+
 # vk = VizKitPlanetRelative(exc)
 # vk.target(sc.outputs.body())
 # vk.planet(earth.outputs.inertial_frame())
@@ -321,6 +330,10 @@ while not exc.isTerminated():
         print(bruh.get(1))
         print(bruh.get(2))
         # print(bruh.get(3))
+        bruh2 = sc.outputs.pos_sc_pci()
+        print(bruh2.get(0))
+        print(bruh2.get(1))
+        print(bruh2.get(2))
         print('---------')
 
         # suns = erf_sens.outputs.pos_tgt_ref__out()
@@ -345,12 +358,12 @@ while not exc.isTerminated():
 
     exc.step()
 
-# print('periapsis')
-# print((semimajoraxis*(1-ecc) - (6378.14*1000))/1000)
-# print('apoapsis')
-# print((semimajoraxis*(1+ecc) - (6378.14*1000))/1000)
-# print(inclination)
-# print(raan)
-# print(argofp)
-# print(trueAnom*RADIANS_TO_DEGREES)
+print('periapsis')
+print((semimajoraxis*(1-ecc) - (6378.14*1000))/1000)
+print('apoapsis')
+print((semimajoraxis*(1+ecc) - (6378.14*1000))/1000)
+print(inclination)
+print(raan)
+print(argofp)
+print(trueAnom*RADIANS_TO_DEGREES)
 "-------------------------------------------------------------------------------------------------------------------------------"
