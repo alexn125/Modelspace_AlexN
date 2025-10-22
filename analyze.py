@@ -12,6 +12,7 @@ from modelspace.ModelSpacePy import Quaternion, MRP
 
 truth = pd.read_csv('results/truth.csv')
 nav = pd.read_csv('results/nav_log.csv')
+help = pd.read_csv('results/help.csv')
 
 ## Time vector
 sim_time = nav["time"]
@@ -67,6 +68,18 @@ plt.plot(sim_time,truth['angvel_true_1'])
 plt.subplot(3,1,3)
 plt.plot(sim_time,truth['angvel_true_2'])
 plt.title("Truth Angular Velocity")
+
+f5 = plt.figure(5).add_subplot(projection='3d')
+plt.plot(help["sc_eci_pos_0"],help["sc_eci_pos_1"],help["sc_eci_pos_2"],color='blue')
+
+f6 = plt.figure(6)
+plt.subplot(3,1,1)
+plt.plot(sim_time,help["command_0"])
+plt.subplot(3,1,2)
+plt.plot(sim_time,help["command_1"])
+plt.subplot(3,1,3)
+plt.plot(sim_time,help["command_2"])
+
 
 plt.show()
 

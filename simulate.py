@@ -41,16 +41,20 @@ from modelspace.FrameStateSensorModel import FrameStateSensorModel
 ## Clear terminal
 os.system('cls' if os.name == 'nt' else 'clear')
 
-REACTION_WHEELS = [(Euler321([0.0, 0.0, 0.0]).toDCM()).toQuaternion(),
-                    (Euler321([0.0, 90.0*DEGREES_TO_RADIANS, 0.0]).toDCM()).toQuaternion(),
-                    (Euler321([0.0, 0.0, 90.0*DEGREES_TO_RADIANS]).toDCM()).toQuaternion()]
+# REACTION_WHEELS = [(Euler321([0.0, 0.0, 0.0]).toDCM()).toQuaternion(),
+#                     (Euler321([0.0, 90.0*DEGREES_TO_RADIANS, 0.0]).toDCM()).toQuaternion(),
+#                     (Euler321([0.0, 0.0, 90.0*DEGREES_TO_RADIANS]).toDCM()).toQuaternion()]
+
+REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
+                    Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]),
+                    Quaternion([1,0,0,0])]
 
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
 exc.setRateHz(10)
-exc.end(10.0)
+exc.end(3600.0)
 
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
@@ -98,7 +102,7 @@ with open('INIT_TLE.txt','r') as f:
     f.close() 
 
 ## Calculate remaining elements
-semimajoraxis = (earth.outputs.mu()/meanmot*meanmot)**(1/3)
+semimajoraxis = (earth.outputs.mu()/(meanmot*meanmot))**(1/3)
 
 print(semimajoraxis)
 ## Newton-Raphson to calculate eccentric anomaly
@@ -216,7 +220,7 @@ connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_ine
 triad = TriadGuidance(exc, "triad")
 triad.inputs.current_primary_body(CartesianVector3([0.0, 1.0, 0.0]))
 triad.inputs.current_secondary_body(CartesianVector3([0.0, 0.0, 1.0]))
-connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
+connectSignals(sc.outputs.pos_sc_pci, triad.inputs.desired_primary)
 connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
@@ -233,7 +237,7 @@ for i in range(len(REACTION_WHEELS)):
     rw.append(ReactionWheelModel(exc, "rw_" + str(i)))
     rw[-1].params.sc_body(sc.body())
     rw[-1].params.quat_wheel_body(REACTION_WHEELS[i])
-    rw[-1].params.mom_inertia(0.00081)
+    rw[-1].params.mom_inertia(0.081)
 
 ## Connecting signals
 connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
@@ -267,6 +271,12 @@ exc.logManager().addLog(navout, Time(1))
 # guidout = CsvLogger(exc, "guid_log.csv")
 # guidout.addParameter(exc.time().base_time, "time")     
 # exc.logManager().addLog(guidout, Time(1))
+
+help = CsvLogger(exc, "help.csv")
+help.addParameter(exc.time().base_time,"sim_time")
+help.addParameter(pd.outputs.control_cmd, "command")
+help.addParameter(sc.outputs.pos_sc_pci, "sc_eci_pos")
+exc.logManager().addLog(help, Time(1))
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -323,18 +333,17 @@ while not exc.isTerminated():
         triad.step()
         pd.step()
         
-        bruh = erf_sens.outputs.pos_tgt_ref__out()
-        # bruh = sc.outputs.pos_sc_pci()
-        print('---------')
-        print(bruh.get(0))
-        print(bruh.get(1))
-        print(bruh.get(2))
-        # print(bruh.get(3))
-        bruh2 = sc.outputs.pos_sc_pci()
-        print(bruh2.get(0))
-        print(bruh2.get(1))
-        print(bruh2.get(2))
-        print('---------')
+        # bruh = erf_sens.outputs.pos_tgt_ref__out()
+        # print('earth sensor ---------')
+        # print(bruh.get(0))
+        # print(bruh.get(1))
+        # print(bruh.get(2))
+        # print('sc pos ---------')
+        # bruh2 = sc.outputs.pos_sc_pci()
+        # print(bruh2.get(0))
+        # print(bruh2.get(1))
+        # print(bruh2.get(2))
+        # print('---------')
 
         # suns = erf_sens.outputs.pos_tgt_ref__out()
 
@@ -358,12 +367,19 @@ while not exc.isTerminated():
 
     exc.step()
 
-print('periapsis')
-print((semimajoraxis*(1-ecc) - (6378.14*1000))/1000)
-print('apoapsis')
-print((semimajoraxis*(1+ecc) - (6378.14*1000))/1000)
-print(inclination)
-print(raan)
-print(argofp)
-print(trueAnom*RADIANS_TO_DEGREES)
+# print('periapsis')
+# print((semimajoraxis*(1-ecc) - (6378.14*1000))/1000)
+# print('apoapsis')
+# print((semimajoraxis*(1+ecc) - (6378.14*1000))/1000)
+# print(inclination)
+# print(raan)
+# print(argofp)
+# print(trueAnom*RADIANS_TO_DEGREES)
+
+# bruh3 = orbels_init.outputs.pos__inertial()
+# print(bruh3.get(0))
+# print(bruh3.get(1))
+# print(bruh3.get(2))
+
+
 "-------------------------------------------------------------------------------------------------------------------------------"
