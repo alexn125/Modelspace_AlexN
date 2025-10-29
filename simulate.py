@@ -53,7 +53,7 @@ REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
-exc.setRateHz(10)
+exc.setRateHz(100)
 exc.end(3600.0)
 
 ## Create Planet and Sun
@@ -283,13 +283,13 @@ exc.logManager().addLog(help, Time(1))
 "Visuals -----------------------------------------------------------------------------------------------------------------------"
 ## Visuals (if on)
 
-vk_planet_rel = VizKitPlanetRelative(exc)
-connectSignals(earth.outputs.inertial_frame, vk_planet_rel.planet)
-connectSignals(sc.outputs.body, vk_planet_rel.target)
+# vk_planet_rel = VizKitPlanetRelative(exc)
+# connectSignals(earth.outputs.inertial_frame, vk_planet_rel.planet)
+# connectSignals(sc.outputs.body, vk_planet_rel.target)
 
-vk_planet_rel_rate = Time()
-vk_planet_rel_rate.fromDouble(10.0)
-exc.logManager().addLog(vk_planet_rel, vk_planet_rel_rate)
+# vk_planet_rel_rate = Time()
+# vk_planet_rel_rate.fromDouble(10.0)
+# exc.logManager().addLog(vk_planet_rel, vk_planet_rel_rate)
 
 # vk = VizKitPlanetRelative(exc)
 # vk.target(sc.outputs.body())
