@@ -45,17 +45,13 @@ os.system('cls' if os.name == 'nt' else 'clear')
 #                     (Euler321([0.0, 90.0*DEGREES_TO_RADIANS, 0.0]).toDCM()).toQuaternion(),
 #                     (Euler321([0.0, 0.0, 90.0*DEGREES_TO_RADIANS]).toDCM()).toQuaternion()]
 
-REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
-                    Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]),
-                    Quaternion([1,0,0,0])]
-
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
-exc.setRateHz(100)
+exc.setRateHz(10)
 exc.end(3600.0)
-
+# exc.end(100.0)
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
 sun = SpicePlanet(exc, "sun")
@@ -101,32 +97,46 @@ with open('INIT_TLE.txt','r') as f:
 
     f.close() 
 
+# print(earth.outputs.mu())
 ## Calculate remaining elements
 semimajoraxis = (earth.outputs.mu()/(meanmot*meanmot))**(1/3)
 
-print(semimajoraxis)
 ## Newton-Raphson to calculate eccentric anomaly
 max_iterations = 100
 tolerance = 1e-14
 its = 0
 Eg = meananom
 while its<max_iterations:
-    out = meananom + (ecc*math.sin(Eg)) - Eg
-    if abs(out) < tolerance:
+    E = meananom + (ecc*math.sin(Eg)) - Eg
+    if abs(E) < tolerance:
         EccAnom = Eg 
         trueAnom = 2*math.atan(math.sqrt((1+ecc)/(1-ecc))*math.tan(EccAnom/2)) # True anomaly from eccentric anomaly
+        # print(math.atan(math.sqrt((1+ecc)/(1-ecc))))
+        # print(math.tan(EccAnom/2))
         break
     else:
         bottom = (ecc*math.cos(Eg)) - 1
-        Eg2 = Eg - (out/bottom)
+        Eg2 = Eg - (E/bottom)
         Eg = Eg2
         its += 1
         if its == max_iterations:
             raise RuntimeError
-            
+
+# print("Semimajor Axis (m):", semimajoraxis)
+# print("Eccentricity:", ecc)
+# print("Inclination (deg):", inclination)
+# print("RAAN (deg):", raan)
+# print("Argument of Perigee (deg):", argofp)
+# print("True Anomaly (deg):", trueAnom*RADIANS_TO_DEGREES)
+
+
 ## Spacecraft Object
 sc = Spacecraft(exc,"sc")
 sc.configureFromDefault("6U")
+# print("Spacecraft Mass (kg):",sc.params.mass())
+# print("Spacecraft MOI Tensor row 1 (kg*m^2):",sc.params.inertia().get(0,0), sc.params.inertia().get(0,1), sc.params.inertia().get(0,2))
+# print("Spacecraft MOI Tensor row 2 (kg*m^2):",sc.params.inertia().get(1,0), sc.params.inertia().get(1,1), sc.params.inertia().get(1,2))
+# print("Spacecraft MOI Tensor row 3 (kg*m^2):",sc.params.inertia().get(2,0), sc.params.inertia().get(2,1), sc.params.inertia().get(2,2))
 
 ## Initial Truth Attitude and Angular Velocity
 init_attitude_truth = MRP([0.0, 0.1, 0.0])
@@ -136,8 +146,13 @@ init_angvel_truth = CartesianVector3([-0.2*DEGREES_TO_RADIANS, 0.2*DEGREES_TO_RA
 connectSignals(orbels_init.outputs.pos__inertial, sc.params.initial_position)
 connectSignals(orbels_init.outputs.vel__inertial, sc.params.initial_velocity)
 sc.params.initial_attitude(init_attitude_truth.toQuaternion())
+# initatt = sc.params.initial_attitude()
+
+# print("Initial Attitude Quaternion:", initatt.get(0), initatt.get(1), initatt.get(2), initatt.get(3))
+
 sc.params.initial_ang_vel(init_angvel_truth)
 sc.params.planet_ptr(earth)
+
 #! Set mass and MOI tensor
 
 ## Initial truth position and velocity from Keplerian elements
@@ -152,24 +167,24 @@ orbels_init.params.f(trueAnom)
 
 "Sensor Setup ------------------------------------------------------------------------------------------------------------------"
 ## Star Tracker
-st = StarTracker(exc, "st")
+st = StarTracker(exc, START_STEP, "st")
 st.configureFromDefault("Arcsec_Sagitta")
 st.params.mount_frame(sc.outputs.body())
 st.params.reference_frame(earth.outputs.inertial_frame())
 
 ## IMU
-imu = IMU(exc, "imu")
+imu = IMU(exc, START_STEP, "imu")
 imu.params.mount_frame(sc.outputs.body())
 imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
 
 ## Sun Sensor
-sun_sens = FrameStateSensorModel(exc,"sun_sens")
+sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
 sun_sens.params.target_frame_ptr(sc.outputs.body())
 sun_sens.params.reference_frame_ptr(sun.outputs.inertial_frame())
-sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
+sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 
 ## Nadir Earth Sensor
-erf_sens = FrameStateSensorModel(exc, "erf_sens")
+erf_sens = FrameStateSensorModel(exc, START_STEP, "erf_sens")
 erf_sens.params.target_frame_ptr(earth.outputs.inertial_frame())
 erf_sens.params.reference_frame_ptr(sc.outputs.body())
 erf_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
@@ -217,9 +232,9 @@ connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_ine
 
 "Guidance ----------------------------------------------------------------------------------------------------------------------"
 ## Triad Guidance setup
-triad = TriadGuidance(exc, "triad")
-triad.inputs.current_primary_body(CartesianVector3([0.0, 1.0, 0.0]))
-triad.inputs.current_secondary_body(CartesianVector3([0.0, 0.0, 1.0]))
+triad = TriadGuidance(exc, NOT_SCHEDULED, "triad")
+triad.inputs.current_primary_body(CartesianVector3([-1.0, 0.0, 0.0]))
+triad.inputs.current_secondary_body(CartesianVector3([0.0, 1.0, 0.0]))
 connectSignals(sc.outputs.pos_sc_pci, triad.inputs.desired_primary)
 connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
 
@@ -227,22 +242,42 @@ connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary
 
 "Control -----------------------------------------------------------------------------------------------------------------------"
 ## Control setup
-pd = PidAttitudeControl(exc, NOT_SCHEDULED, "PD")
-pd.params.P(-1/20)
-pd.params.K(-1/10)
+# pd = PidAttitudeControl(exc, NOT_SCHEDULED, "PD")
+# pd.params.P(-1)
+# pd.params.K(-1)
+
+## Reaction wheel orientations (body frame)
+# REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
+                    # Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]),
+                    # Quaternion([1,0,0,0])]
 
 ## Reaction wheel setup
-rw = []
-for i in range(len(REACTION_WHEELS)):
-    rw.append(ReactionWheelModel(exc, "rw_" + str(i)))
-    rw[-1].params.sc_body(sc.body())
-    rw[-1].params.quat_wheel_body(REACTION_WHEELS[i])
-    rw[-1].params.mom_inertia(0.081)
+# rw0 = ReactionWheelModel(exc, NOT_SCHEDULED, "rw_0")
+# rw0.params.sc_body(sc.body())
+# rw0.params.quat_wheel_body(Quaternion([1,0,0,0]))
+# rw0.params.mom_inertia(1000)
+# rw0.params.peak_torque(1000)
+# rw0.params.momentum_cap(1000)
+# 
+# rw1 = ReactionWheelModel(exc, NOT_SCHEDULED, "rw_1")
+# rw1.params.sc_body(sc.body())
+# rw1.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]))
+# rw1.params.mom_inertia(1000)
+# rw1.params.peak_torque(1000)
+# rw1.params.momentum_cap(1000)
+# 
+# rw2 = ReactionWheelModel(exc, NOT_SCHEDULED, "rw_2")
+# rw2.params.sc_body(sc.body())
+# rw2.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]))
+# rw2.params.mom_inertia(1000)
+# rw2.params.peak_torque(1000)
+# rw2.params.momentum_cap(1000)
 
 ## Connecting signals
-connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
-connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
-connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
+# connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
+# pd.inputs.cmd_state(Quaternion([1,0,0,0]))
+# connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
+# connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -268,15 +303,16 @@ navout.addParameter(ekf_meas.outputs.meas_processed,"meas_processed")
 navout.addParameter(ekf_meas.outputs.meas_pre_residual,"pre_update_residual")   
 exc.logManager().addLog(navout, Time(1))
 
-# guidout = CsvLogger(exc, "guid_log.csv")
-# guidout.addParameter(exc.time().base_time, "time")     
-# exc.logManager().addLog(guidout, Time(1))
+guidout = CsvLogger(exc, "guid_log.csv")
+guidout.addParameter(exc.time().base_time, "time")
+guidout.addParameter(triad.outputs.quat_body_ref,"quat_body_ref")     
+exc.logManager().addLog(guidout, Time(1))
 
-help = CsvLogger(exc, "help.csv")
-help.addParameter(exc.time().base_time,"sim_time")
-help.addParameter(pd.outputs.control_cmd, "command")
-help.addParameter(sc.outputs.pos_sc_pci, "sc_eci_pos")
-exc.logManager().addLog(help, Time(1))
+# help = CsvLogger(exc, "help.csv")
+# help.addParameter(exc.time().base_time,"sim_time")
+# help.addParameter(pd.outputs.control_cmd, "command")
+# help.addParameter(sc.outputs.pos_sc_pci, "sc_eci_pos")
+# exc.logManager().addLog(help, Time(1))
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -296,7 +332,7 @@ exc.logManager().addLog(help, Time(1))
 # vk.planet(earth.outputs.inertial_frame())
 # exc.logManager().addLog(vk, Time(100))
 
-"-------------------------------------------------------------------------------------------------------------------------------"
+# "-------------------------------------------------------------------------------------------------------------------------------"
 
 "Simulation Loop ---------------------------------------------------------------------------------------------------------------"
 ## Startup (initializes exc and models)
@@ -322,64 +358,51 @@ COV_initial.set(4, 4, 0.1)
 COV_initial.set(5, 5, 0.1)
 ekf_prop.inputs.cov_prev(COV_initial)
 
-stepval = 0
+# sc.params.initial_attitude(init_attitude_truth.toQuaternion())
+# print.(
+# "Post-Initialization Attitude Quaternion:", sc.params.initial_attitude().get(0), sc.params.initial_attitude().get(1), sc.params.initial_attitude().get(2), sc.params.initial_attitude().get(3))
 
 ## Run simulation
+tolerance = 1e-5
+
+torquecommand = CartesianVector3([0.0,0.0,0.0])
+
 while not exc.isTerminated():
-    if stepval == 0:
+    currentsimtime = exc.simTime()
+    check = currentsimtime - math.floor(currentsimtime)
+    
+    # if currentsimtime == 0.0:
+    #     initpos = sc.params.initial_position()
+    #     print("Initial Position ECI (m):", initpos.get(0), initpos.get(1), initpos.get(2))
+
+    #     initangv = sc.params.initial_ang_vel()
+    #     print("Initial Angular Velocity (rad/s):", initangv.get(0), initangv.get(1), initangv.get(2))
+    
+    if abs(check) < tolerance:
         ekf_prop.step()
         process_noise.step()
         ekf_meas.step()
         triad.step()
-        pd.step()
+        # pd.step()
         
-        # bruh = erf_sens.outputs.pos_tgt_ref__out()
-        # print('earth sensor ---------')
-        # print(bruh.get(0))
-        # print(bruh.get(1))
-        # print(bruh.get(2))
-        # print('sc pos ---------')
-        # bruh2 = sc.outputs.pos_sc_pci()
-        # print(bruh2.get(0))
-        # print(bruh2.get(1))
-        # print(bruh2.get(2))
-        # print('---------')
-
-        # suns = erf_sens.outputs.pos_tgt_ref__out()
-
-        # sunsmag = math.sqrt(suns.get(0)**2 + suns.get(1)**2 + suns.get(2)**2)
-        # if exc.simTime() != 0.0:
-        #     print('---------')
-        #     print(suns.get(0)/sunsmag)
-        #     print(suns.get(1)/sunsmag)
-        #     print(suns.get(2)/sunsmag)
-        #     print('---------')
-        # Torque commands
-        torquecommand = pd.outputs.control_cmd()
-        rw[0].inputs.torque_com(torquecommand.get(0))
-        rw[1].inputs.torque_com(torquecommand.get(1))
-        rw[2].inputs.torque_com(torquecommand.get(2))
         # print(exc.simTime())
 
-    stepval += 1
-    if stepval == 10:
-        stepval = 0
+        # torquecommand = pd.outputs.control_cmd()
+        # current_att = sc.outputs.quat_sc_pci()
+        # print("at time:",exc.simTime(),"attitude:",current_att.get(0),current_att.get(1),current_att.get(2),current_att.get(3))
+
+    # rw0.inputs.torque_com(torquecommand.get(0))
+    # rw1.inputs.torque_com(torquecommand.get(1))
+    # rw2.inputs.torque_com(torquecommand.get(2))
+    # print(torquecommand.get(0), torquecommand.get(1), torquecommand.get(2))
+    # rw0.step()
+    # rw1.step()
+    # rw2.step()
 
     exc.step()
+    # attrn = sc.outputs.quat_sc_pci()
+    # print("Time (s):", exc.simTime(), "Attitude Quaternion:", attrn.get(0), attrn.get(1), attrn.get(2), attrn.get(3))
 
-# print('periapsis')
-# print((semimajoraxis*(1-ecc) - (6378.14*1000))/1000)
-# print('apoapsis')
-# print((semimajoraxis*(1+ecc) - (6378.14*1000))/1000)
-# print(inclination)
-# print(raan)
-# print(argofp)
-# print(trueAnom*RADIANS_TO_DEGREES)
-
-# bruh3 = orbels_init.outputs.pos__inertial()
-# print(bruh3.get(0))
-# print(bruh3.get(1))
-# print(bruh3.get(2))
-
-
+    # angv = sc.outputs.ang_vel_sc_pci__body()
+    # print("Time (s):", exc.simTime(), "Angular Velocity (rad/s):", angv.get(0), angv.get(1), angv.get(2))
 "-------------------------------------------------------------------------------------------------------------------------------"
