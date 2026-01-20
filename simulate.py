@@ -167,7 +167,7 @@ imu.params.mount_frame(sc.outputs.body())
 imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
 
 ## Sun Sensor
-sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
+sun_sens = FrameStateSensorModel(exc, NOT_SCHEDULED, "sun_sens")
 sun_sens.params.target_frame_ptr(sc.outputs.body())
 sun_sens.params.reference_frame_ptr(sun.outputs.inertial_frame())
 sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
@@ -363,23 +363,36 @@ while not exc.isTerminated():
     if abs(check) < tolerance:
 
         ## Navigation
+
         ekf_prop.step()
         process_noise.step()
         ekf_meas.step()
 
         ## Guidance
+
+        # GPS/earth sensor
         erf_sens.step() 
         GPSout = erf_sens.outputs.pos_tgt_ref__out()
         GPSnoised = CartesianVector3([0.0,0.0,0.0]) # preallocate en-noised GPS measurement
         GPSnoise = np.random.normal(0,GPSstd,(3,1)) # noise gen
         for i in range(3):
             GPSnoised.set(i, GPSout.get(i) + GPSnoise[i][0])
-        # print("at time:",exc.simTime(),"gps meas:",GPSnoised.get(0)-GPSout.get(0), GPSnoised.get(1)-GPSout.get(1), GPSnoised.get(2)-GPSout.get(2))
-        
-        triad.inputs.desired_primary(GPSnoised)
+        print("at time:",exc.simTime(),"gps meas:",GPSout.get(0), GPSout.get(1), GPSout.get(2))
 
+        # sun sensor
+        sun_sens.step()
+        sunout = sun_sens.outputs.pos_tgt_ref__out()
+        sunnorm = math.sqrt(sunout.get(0)**2 + sunout.get(1)**2 + sunout.get(2)**2)
+        # sun meas w/o noise, direction reversed to get s/c->sun vector and normalized
+        sun_noised = CartesianVector3([-1*(sunout.get(0)/sunnorm),-1*(sunout.get(1)/sunnorm),-1*(sunout.get(2)/sunnorm)])
+        # print(sun_noised.get(0), sun_noised.get(1), sun_noised.get(2))
+        
+        # TRIAD
+        triad.inputs.desired_primary(GPSnoised)
+        triad.inputs.desired_secondary(sun_noised)
         triad.step()
 
+        ## Control
         # pd.step()
         
         # print(exc.simTime())
