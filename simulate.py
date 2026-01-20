@@ -4,6 +4,7 @@ Alex Newett - Modelspace GNC Research 2025
 """
 ## Important stuff
 import sys, math, os
+import numpy as np
 ## Basic imports
 from modelspace.Spacecraft import Spacecraft
 from modelspace.CustomPlanet import CustomPlanet
@@ -12,6 +13,7 @@ from modelspace.OrbitalElementsStateInit import OrbitalElementsStateInit
 ## Sensor imports
 from modelspace.StarTracker import StarTracker
 from modelspace.IMU import IMU
+from modelspace.BiasNoiseModel import BiasNoiseModel
 # from modelspace.Magnetometer import Magnetometer
 ## Navigation imports
 from modelspace.AttitudeEkfTimeUpdate import AttitudeEkfTimeUpdate
@@ -122,21 +124,11 @@ while its<max_iterations:
         if its == max_iterations:
             raise RuntimeError
 
-# print("Semimajor Axis (m):", semimajoraxis)
-# print("Eccentricity:", ecc)
-# print("Inclination (deg):", inclination)
-# print("RAAN (deg):", raan)
-# print("Argument of Perigee (deg):", argofp)
-# print("True Anomaly (deg):", trueAnom*RADIANS_TO_DEGREES)
 
 
 ## Spacecraft Object
 sc = Spacecraft(exc,"sc")
 sc.configureFromDefault("6U")
-# print("Spacecraft Mass (kg):",sc.params.mass())
-# print("Spacecraft MOI Tensor row 1 (kg*m^2):",sc.params.inertia().get(0,0), sc.params.inertia().get(0,1), sc.params.inertia().get(0,2))
-# print("Spacecraft MOI Tensor row 2 (kg*m^2):",sc.params.inertia().get(1,0), sc.params.inertia().get(1,1), sc.params.inertia().get(1,2))
-# print("Spacecraft MOI Tensor row 3 (kg*m^2):",sc.params.inertia().get(2,0), sc.params.inertia().get(2,1), sc.params.inertia().get(2,2))
 
 ## Initial Truth Attitude and Angular Velocity
 init_attitude_truth = MRP([0.0, 0.1, 0.0])
@@ -146,9 +138,6 @@ init_angvel_truth = CartesianVector3([-0.2*DEGREES_TO_RADIANS, 0.2*DEGREES_TO_RA
 connectSignals(orbels_init.outputs.pos__inertial, sc.params.initial_position)
 connectSignals(orbels_init.outputs.vel__inertial, sc.params.initial_velocity)
 sc.params.initial_attitude(init_attitude_truth.toQuaternion())
-# initatt = sc.params.initial_attitude()
-
-# print("Initial Attitude Quaternion:", initatt.get(0), initatt.get(1), initatt.get(2), initatt.get(3))
 
 sc.params.initial_ang_vel(init_angvel_truth)
 sc.params.planet_ptr(earth)
@@ -183,11 +172,15 @@ sun_sens.params.target_frame_ptr(sc.outputs.body())
 sun_sens.params.reference_frame_ptr(sun.outputs.inertial_frame())
 sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 
-## Nadir Earth Sensor
-erf_sens = FrameStateSensorModel(exc, START_STEP, "erf_sens")
-erf_sens.params.target_frame_ptr(earth.outputs.inertial_frame())
-erf_sens.params.reference_frame_ptr(sc.outputs.body())
+## GPS/Earth Sensor
+erf_sens = FrameStateSensorModel(exc, NOT_SCHEDULED, "erf_sens")
+erf_sens.params.target_frame_ptr(sc.outputs.body())
+erf_sens.params.reference_frame_ptr(earth.outputs.inertial_frame())
 erf_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
+
+GPSstd = 500 # meters
+GPSseed = 42
+np.random.seed(GPSseed)
 
 ## Magnetomer
 # mag = Magnetometer(exc, "mag")
@@ -233,9 +226,9 @@ connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_ine
 "Guidance ----------------------------------------------------------------------------------------------------------------------"
 ## Triad Guidance setup
 triad = TriadGuidance(exc, NOT_SCHEDULED, "triad")
-triad.inputs.current_primary_body(CartesianVector3([-1.0, 0.0, 0.0]))
+triad.inputs.current_primary_body(CartesianVector3([1.0, 0.0, 0.0]))
 triad.inputs.current_secondary_body(CartesianVector3([0.0, 1.0, 0.0]))
-connectSignals(sc.outputs.pos_sc_pci, triad.inputs.desired_primary)
+# connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
 connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
@@ -358,10 +351,6 @@ COV_initial.set(4, 4, 0.1)
 COV_initial.set(5, 5, 0.1)
 ekf_prop.inputs.cov_prev(COV_initial)
 
-# sc.params.initial_attitude(init_attitude_truth.toQuaternion())
-# print.(
-# "Post-Initialization Attitude Quaternion:", sc.params.initial_attitude().get(0), sc.params.initial_attitude().get(1), sc.params.initial_attitude().get(2), sc.params.initial_attitude().get(3))
-
 ## Run simulation
 tolerance = 1e-5
 
@@ -370,19 +359,27 @@ torquecommand = CartesianVector3([0.0,0.0,0.0])
 while not exc.isTerminated():
     currentsimtime = exc.simTime()
     check = currentsimtime - math.floor(currentsimtime)
-    
-    # if currentsimtime == 0.0:
-    #     initpos = sc.params.initial_position()
-    #     print("Initial Position ECI (m):", initpos.get(0), initpos.get(1), initpos.get(2))
-
-    #     initangv = sc.params.initial_ang_vel()
-    #     print("Initial Angular Velocity (rad/s):", initangv.get(0), initangv.get(1), initangv.get(2))
-    
+ 
     if abs(check) < tolerance:
+
+        ## Navigation
         ekf_prop.step()
         process_noise.step()
         ekf_meas.step()
+
+        ## Guidance
+        erf_sens.step() 
+        GPSout = erf_sens.outputs.pos_tgt_ref__out()
+        GPSnoised = CartesianVector3([0.0,0.0,0.0]) # preallocate en-noised GPS measurement
+        GPSnoise = np.random.normal(0,GPSstd,(3,1)) # noise gen
+        for i in range(3):
+            GPSnoised.set(i, GPSout.get(i) + GPSnoise[i][0])
+        # print("at time:",exc.simTime(),"gps meas:",GPSnoised.get(0)-GPSout.get(0), GPSnoised.get(1)-GPSout.get(1), GPSnoised.get(2)-GPSout.get(2))
+        
+        triad.inputs.desired_primary(GPSnoised)
+
         triad.step()
+
         # pd.step()
         
         # print(exc.simTime())
@@ -406,3 +403,26 @@ while not exc.isTerminated():
     # angv = sc.outputs.ang_vel_sc_pci__body()
     # print("Time (s):", exc.simTime(), "Angular Velocity (rad/s):", angv.get(0), angv.get(1), angv.get(2))
 "-------------------------------------------------------------------------------------------------------------------------------"
+
+## OLD STUFF
+# erf_sens_noise0 = BiasNoiseModel(exc, NOT_SCHEDULED, "erf_sens_noise0")
+# erf_sens_noise0.params.noise_std(GPSstd)
+# erf_sens_noise0.params.bias(GPSbias)
+# erf_sens_noise0.params.seed_value(GPSseed)
+
+# erf_sens_noise1 = BiasNoiseModel(exc, NOT_SCHEDULED, "erf_sens_noise1")
+# erf_sens_noise1.params.noise_std(GPSstd)
+# erf_sens_noise1.params.bias(GPSbias)
+# erf_sens_noise1.params.seed_value(GPSseed + 1)
+
+# erf_sens_noise2 = BiasNoiseModel(exc, NOT_SCHEDULED, "erf_sens_noise2")
+# erf_sens_noise2.params.noise_std(GPSstd)
+# erf_sens_noise2.params.bias(GPSbias)
+# erf_sens_noise2.params.seed_value(GPSseed + 2)      
+
+# print("Semimajor Axis (m):", semimajoraxis)
+# print("Eccentricity:", ecc)
+# print("Inclination (deg):", inclination)
+# print("RAAN (deg):", raan)
+# print("Argument of Perigee (deg):", argofp)
+# print("True Anomaly (deg):", trueAnom*RADIANS_TO_DEGREES)
