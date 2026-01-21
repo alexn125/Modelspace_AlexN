@@ -27,11 +27,20 @@ mrp_error_0 = []
 mrp_error_1 = []
 mrp_error_2 = []
 
+mrp_guid_0 = []
+mrp_guid_1 = []
+mrp_guid_2 = []
+
 for i in range(len(truth["quat_true_0"])):
     mrpcurrent = Quaternion([truth['quat_true_0'][i],truth['quat_true_1'][i],truth['quat_true_2'][i],truth['quat_true_3'][i]]).toMRP()
     mrp_truth_0.append(mrpcurrent.get(0))
     mrp_truth_1.append(mrpcurrent.get(1))
     mrp_truth_2.append(mrpcurrent.get(2))
+
+    mrpguidcurrent = Quaternion([guid['quat_body_ref_0'][i],guid['quat_body_ref_1'][i],guid['quat_body_ref_2'][i],guid['quat_body_ref_3'][i]]).toMRP()
+    mrp_guid_0.append(mrpguidcurrent.get(0))
+    mrp_guid_1.append(mrpguidcurrent.get(1))
+    mrp_guid_2.append(mrpguidcurrent.get(2))
 
     norm = math.sqrt(mrp_truth_0[i]**2 + mrp_truth_1[i]**2 + mrp_truth_2[i]**2)
 
@@ -45,23 +54,17 @@ for i in range(len(truth["quat_true_0"])):
     mrp_error_2.append(mrp_truth_2[i] - nav['mrp_minus_2'][i])
 
 
-Nav_cov_p = [3.0*math.sqrt(val) for val in nav['cov_plus_0_0']]
+Nav_cov_p = [3.0*math.sqrt(val) for val in nav['cov_plus_0_0']] # 3-sigma covariance
 Nav_cov_n = [-1.0*val for val in Nav_cov_p]    
 
 f1 = plt.figure(1)
-plt.subplot(6,1,1)
-plt.plot(sim_time,mrp_truth_0)
-plt.subplot(6,1,2)
-plt.plot(sim_time,mrp_truth_1)
-plt.subplot(6,1,3)
-plt.plot(sim_time,mrp_truth_2)
-plt.title("Truth vs Est. MRP")
-plt.subplot(6,1,4)
-plt.plot(sim_time,nav['mrp_minus_0'])
-plt.subplot(6,1,5)
-plt.plot(sim_time,nav['mrp_minus_1'])
-plt.subplot(6,1,6)
-plt.plot(sim_time,nav['mrp_minus_2'])
+plt.subplot(3,1,1)
+plt.plot(sim_time,mrp_truth_0,sim_time,nav['mrp_minus_0'])
+plt.subplot(3,1,2)
+plt.plot(sim_time,mrp_truth_1,sim_time,nav['mrp_minus_1'])
+plt.subplot(3,1,3)
+plt.plot(sim_time,mrp_truth_2,sim_time,nav['mrp_minus_2'])
+plt.plot()
 
 # f2 = plt.figure(2)
 # plt.subplot(3,1,1)
@@ -126,12 +129,25 @@ plt.plot(sim_time,mrp_error_2)
 f8 = plt.figure(8)
 plt.subplot(4,1,1)
 plt.plot(guid['time'],guid['quat_body_ref_0'])
+plt.ylabel('Scalar Part')
 plt.subplot(4,1,2)
 plt.plot(guid['time'],guid['quat_body_ref_1'])
+plt.ylabel('q1')
 plt.subplot(4,1,3)
 plt.plot(guid['time'],guid['quat_body_ref_2'])
+plt.ylabel('q2')
 plt.subplot(4,1,4)
 plt.plot(guid['time'],guid['quat_body_ref_3'])
+plt.ylabel('q3')
+
+f9 = plt.figure(9)
+plt.subplot(3,1,1)
+plt.plot(sim_time,mrp_guid_0)
+plt.subplot(3,1,2)
+plt.plot(sim_time,mrp_guid_1)
+plt.subplot(3,1,3)
+plt.plot(sim_time,mrp_guid_2)
+plt.title("Guidance MRP")
 
 plt.show()
 
