@@ -13,8 +13,8 @@ from modelspace.ModelSpacePy import Quaternion, MRP
 
 truth = pd.read_csv('results/truth.csv')
 nav = pd.read_csv('results/nav_log.csv')
-help = pd.read_csv('results/help.csv')
 guid = pd.read_csv('results/guid_log.csv')
+cont = pd.read_csv('results/cont_log.csv')
 
 ## Time vector
 sim_time = nav["time"]
@@ -98,25 +98,14 @@ plt.plot()
 # plt.subplot(3,1,3)
 # plotStateAndCovariance(nav['time'], nav['bias_minus_2'], truth['gyro_bias_true_2'], nav['cov_minus_5_5'], '', 'MRP Error ()')
 
-# f4 = plt.figure(4)
-# plt.subplot(3,1,1)
-# plt.plot(sim_time,truth['angvel_true_0'])
-# plt.subplot(3,1,2)
-# plt.plot(sim_time,truth['angvel_true_1'])
-# plt.subplot(3,1,3)
-# plt.plot(sim_time,truth['angvel_true_2'])
-# plt.title("Truth Angular Velocity")
-
-# f5 = plt.figure(5).add_subplot(projection='3d')
-# plt.plot(help["sc_eci_pos_0"],help["sc_eci_pos_1"],help["sc_eci_pos_2"],color='blue')
-
-# f6 = plt.figure(6)
-# plt.subplot(3,1,1)
-# plt.plot(sim_time,help["command_0"])
-# plt.subplot(3,1,2)
-# plt.plot(sim_time,help["command_1"])
-# plt.subplot(3,1,3)
-# plt.plot(sim_time,help["command_2"])
+f4 = plt.figure(4)
+plt.subplot(3,1,1)
+plt.plot(sim_time,truth['angvel_true_0'])
+plt.subplot(3,1,2)
+plt.plot(sim_time,truth['angvel_true_1'])
+plt.subplot(3,1,3)
+plt.plot(sim_time,truth['angvel_true_2'])
+plt.title("Truth Angular Velocity")
 
 f7 = plt.figure(7)
 plt.subplot(3,1,1)
@@ -147,7 +136,15 @@ plt.subplot(3,1,2)
 plt.plot(sim_time,mrp_guid_1)
 plt.subplot(3,1,3)
 plt.plot(sim_time,mrp_guid_2)
-plt.title("Guidance MRP")
+plt.title("TRIAD guidance MRP")
+
+f10 = plt.figure(10)
+plt.subplot(3,1,1)
+plt.plot(sim_time,cont["pd output_0"],sim_time,cont["torque_rw0"]) 
+plt.subplot(3,1,2)
+plt.plot(sim_time,cont["pd output_1"],sim_time,cont["torque_rw1"]) 
+plt.subplot(3,1,3)
+plt.plot(sim_time,cont["pd output_2"],sim_time,cont["torque_rw2"])
 
 plt.show()
 

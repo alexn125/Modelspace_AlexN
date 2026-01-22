@@ -129,7 +129,15 @@ while its<max_iterations:
 
 ## Spacecraft Object
 sc = Spacecraft(exc,"sc")
-sc.configureFromDefault("6U")
+# sc.configureFromDefault("6U")
+
+sc.params.mass(8.0)
+sc.params.inertia(Matrix3([[0.026, 0.0, 0.0],
+                   [0.0, 0.06, 0.0],
+                   [0.0, 0.0, 0.085]]))
+
+print("Spacecraft mass (kg):", sc.params.mass())
+print("Spacecraft MOI (kg m^2):", sc.params.inertia().get(0,1), sc.params.inertia().get(1,0), sc.params.inertia().get(2,2))
 
 ## Initial Truth Attitude and Angular Velocity
 init_attitude_truth = MRP([0.0, 0.1, 0.0])
@@ -241,9 +249,9 @@ pd.params.P(-1/1)
 pd.params.K(-1/2)
 
 ## Reaction wheel orientations (body frame)
-REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
-                    Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]),
-                    Quaternion([1,0,0,0])]
+# REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
+#                     Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]),
+#                     Quaternion([1,0,0,0])]
 
 ## Reaction wheel setup
 rw0 = ReactionWheelModel(exc, NOT_SCHEDULED, "rw_0")
@@ -279,8 +287,8 @@ connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
 connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
 connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
 
-w_des = CartesianVector3([0.0,0.0,0.0]) # desired angular velocity
-pd.inputs.cmd_ang_vel(w_des)
+# w_des = CartesianVector3([0.0,0.0,0.0]) # desired angular velocity
+# pd.inputs.cmd_ang_vel(w_des)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -311,12 +319,13 @@ guidout.addParameter(exc.time().base_time, "time")
 guidout.addParameter(triad.outputs.quat_body_ref,"quat_body_ref")     
 exc.logManager().addLog(guidout, Time(1))
 
-# help = CsvLogger(exc, "help.csv")
-# help.addParameter(exc.time().base_time,"sim_time")
-# help.addParameter(pd.outputs.control_cmd, "command")
-# help.addParameter(sc.outputs.pos_sc_pci, "sc_eci_pos")
-# exc.logManager().addLog(help, Time(1))
-
+contout = CsvLogger(exc, "cont_log.csv")
+contout.addParameter(exc.time().base_time,"sim_time")
+contout.addParameter(pd.outputs.control_cmd, "pd output")
+contout.addParameter(rw0.outputs.applied_torque, "torque_rw0")
+contout.addParameter(rw1.outputs.applied_torque, "torque_rw1")
+contout.addParameter(rw2.outputs.applied_torque, "torque_rw2")
+exc.logManager().addLog(contout, Time(1))
 "-------------------------------------------------------------------------------------------------------------------------------"
 
 "Visuals -----------------------------------------------------------------------------------------------------------------------"
@@ -366,14 +375,24 @@ tolerance = 1e-5
 
 torquecommand = CartesianVector3([0.0,0.0,0.0])
 
+first_step = True
+
 while not exc.isTerminated():
     currentsimtime = exc.simTime()
     check = currentsimtime - math.floor(currentsimtime)
-    
 
+    rw0.inputs.torque_com(torquecommand.get(0))
+    rw1.inputs.torque_com(torquecommand.get(1))
+    rw2.inputs.torque_com(torquecommand.get(2))
+       
+    rw0.step()
+    rw1.step()
+    rw2.step()
 
     if abs(check) < tolerance:
 
+        # print("sim_time", exc.simTime(), "RW Torques:", rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
+        print(torquecommand.get(0), torquecommand.get(1), torquecommand.get(2))
         ## Navigation
 
         ekf_prop.step()
@@ -415,28 +434,23 @@ while not exc.isTerminated():
         # for i in range(3):
         #     torquecommand.set(i, K*errorq.get(i+1))  # P-control only for now
 
-        rw0.inputs.torque_com(torquecommand.get(0))
-        rw1.inputs.torque_com(torquecommand.get(1))
-        rw2.inputs.torque_com(torquecommand.get(2))
-       
-        rw0.step()
-        rw1.step()
-        rw2.step()
+        
 
         # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
 
-        exc.step()
+        # exc.step()
         # current_att = sc.outputs.quat_sc_pci()
         # print("at time:",exc.simTime(),"attitude:",current_att.get(0),current_att.get(1),current_att.get(2),current_att.get(3))
-    else:
-        rw0.inputs.torque_com(torquecommand.get(0))
-        rw1.inputs.torque_com(torquecommand.get(1))
-        rw2.inputs.torque_com(torquecommand.get(2))
-        rw0.step()
-        rw1.step()
-        rw2.step()
-        # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
-        exc.step()
+    exc.step()
+    # else:
+    #     rw0.inputs.torque_com(torquecommand.get(0))
+    #     rw1.inputs.torque_com(torquecommand.get(1))
+    #     rw2.inputs.torque_com(torquecommand.get(2))
+    #     rw0.step()
+    #     rw1.step()
+    #     rw2.step()
+    #     # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
+    #     exc.step()
 
     # attrn = sc.outputs.quat_sc_pci()
     # print("Time (s):", exc.simTime(), "Attitude Quaternion:", attrn.get(0), attrn.get(1), attrn.get(2), attrn.get(3))
