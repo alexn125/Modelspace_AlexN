@@ -140,11 +140,12 @@ plt.title("TRIAD guidance MRP")
 
 f10 = plt.figure(10)
 plt.subplot(3,1,1)
-plt.plot(sim_time,cont["pd output_0"],sim_time,cont["torque_rw0"]) 
+plt.plot(sim_time,cont["pd output_0"],sim_time,cont["torque_rw1"])
+plt.legend(['PD Output','RW Torque']) 
 plt.subplot(3,1,2)
-plt.plot(sim_time,cont["pd output_1"],sim_time,cont["torque_rw1"]) 
+plt.plot(sim_time,cont["pd output_1"],sim_time,cont["torque_rw2"]) 
 plt.subplot(3,1,3)
-plt.plot(sim_time,cont["pd output_2"],sim_time,cont["torque_rw2"])
+plt.plot(sim_time,cont["pd output_2"],sim_time,cont["torque_rw0"])
 
 plt.show()
 

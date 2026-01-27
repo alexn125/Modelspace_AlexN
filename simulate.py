@@ -51,7 +51,7 @@ os.system('cls' if os.name == 'nt' else 'clear')
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
-exc.setRateHz(10)
+exc.setRateHz(1)
 exc.end(3600.0)
 # exc.end(100.0)
 
@@ -176,13 +176,13 @@ imu.params.mount_frame(sc.outputs.body())
 imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
 
 ## Sun Sensor
-sun_sens = FrameStateSensorModel(exc, NOT_SCHEDULED, "sun_sens")
+sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
 sun_sens.params.target_frame_ptr(sc.outputs.body())
 sun_sens.params.reference_frame_ptr(sun.outputs.inertial_frame())
 sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 
 ## GPS/Earth Sensor
-erf_sens = FrameStateSensorModel(exc, NOT_SCHEDULED, "erf_sens")
+erf_sens = FrameStateSensorModel(exc, START_STEP, "erf_sens")
 erf_sens.params.target_frame_ptr(sc.outputs.body())
 erf_sens.params.reference_frame_ptr(earth.outputs.inertial_frame())
 erf_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
@@ -200,12 +200,12 @@ np.random.seed(GPSseed)
 
 "Navigation --------------------------------------------------------------------------------------------------------------------"
 ## Attitude EKF Time Update (Propagation)
-ekf_prop = AttitudeEkfTimeUpdate(exc, NOT_SCHEDULED, "ekf_prop")
+ekf_prop = AttitudeEkfTimeUpdate(exc, START_STEP, "ekf_prop")
 connectSignals(ekf_prop.outputs.time_state, ekf_prop.inputs.time_prev)
 connectSignals(exc.time().base_time, ekf_prop.inputs.time_update)
 
 ## Process Noise 
-process_noise = SimpleDiscreteProcessNoise(exc, NOT_SCHEDULED, "process_noise")
+process_noise = SimpleDiscreteProcessNoise(exc, START_STEP, "process_noise")
 process_noise.params.Qc(Matrix3([[3e-9, 0, 0], [0, 3e-9, 0], [0, 0, 3e-9]]))
 B = Matrix63([[1,0,0],[0,1,0],[0,0,1],[0,0,0],[0,0,0],[0,0,0]])
 process_noise.params.B(B)
@@ -214,7 +214,7 @@ process_noise.inputs.time_update(Time(1))
 connectSignals(ekf_prop.outputs.cov_update, process_noise.inputs.cov_pre_snc)
 
 ## Attitude EKF Measurement Update
-ekf_meas = AttitudeEkfMeasUpdate(exc, NOT_SCHEDULED, "ekf_meas")
+ekf_meas = AttitudeEkfMeasUpdate(exc, END_STEP, "ekf_meas")
 ekf_meas.params.att_residual_filter(4)
 ekf_meas.params.meas_covariance(Matrix3([[3e-5, 0, 0], [0, 3e-5, 0], [0, 0, 3e-5]]))
 
@@ -234,19 +234,19 @@ connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_ine
 
 "Guidance ----------------------------------------------------------------------------------------------------------------------"
 ## Triad Guidance setup
-triad = TriadGuidance(exc, NOT_SCHEDULED, "triad")
+triad = TriadGuidance(exc, END_STEP, "triad")
 triad.inputs.current_primary_body(CartesianVector3([1.0, 0.0, 0.0]))
 triad.inputs.current_secondary_body(CartesianVector3([0.0, 1.0, 0.0]))
-# connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
-# connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
+connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
+connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
 "Control -----------------------------------------------------------------------------------------------------------------------"
 ## Control setup
-pd = PidAttitudeControl(exc, NOT_SCHEDULED, "PD")
-pd.params.P(-1/1)
-pd.params.K(-1/2)
+pd = PidAttitudeControl(exc, END_STEP, "PD")
+pd.params.P(-1/100000)
+pd.params.K(-1/20)
 
 ## Reaction wheel orientations (body frame)
 # REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
@@ -254,41 +254,40 @@ pd.params.K(-1/2)
 #                     Quaternion([1,0,0,0])]
 
 ## Reaction wheel setup
-rw0 = ReactionWheelModel(exc, NOT_SCHEDULED, "rw_0")
+rw0 = ReactionWheelModel(exc, END_STEP, "rw_0")
 rw0.params.sc_body(sc.body())
 rw0.params.quat_wheel_body(Quaternion([1,0,0,0]))
-rw0.params.mom_inertia(1000)
+rw0.params.mom_inertia(0.0004)
 rw0.params.peak_torque(1000)
 rw0.params.momentum_cap(1000)
-rw0.params.mass(1.0)
+rw0.params.mass(0.115)
 rw0.params.wheel_location__body(CartesianVector3([0.05,0.0,0.0]))
 
-rw1 = ReactionWheelModel(exc, NOT_SCHEDULED, "rw_1")
+rw1 = ReactionWheelModel(exc, END_STEP, "rw_1")
 rw1.params.sc_body(sc.body())
 rw1.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]))
-rw1.params.mom_inertia(1000)
+rw1.params.mom_inertia(0.0004)
 rw1.params.peak_torque(1000)
 rw1.params.momentum_cap(1000)
-rw1.params.mass(1.0)
+rw1.params.mass(0.115)
 rw1.params.wheel_location__body(CartesianVector3([0.0,0.05,0.0]))
 
-rw2 = ReactionWheelModel(exc, NOT_SCHEDULED, "rw_2")
+rw2 = ReactionWheelModel(exc, END_STEP, "rw_2")
 rw2.params.sc_body(sc.body())
 rw2.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]))
-rw2.params.mom_inertia(1000)
+rw2.params.mom_inertia(0.0004)
 rw2.params.peak_torque(1000)
 rw2.params.momentum_cap(1000)
-rw2.params.mass(1.0)
+rw2.params.mass(0.115)
 rw2.params.wheel_location__body(CartesianVector3([0.0,0.0,0.05]))
 
 ## Connecting signals
-connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
-# pd.inputs.cmd_state(Quaternion([1,0,0,0]))
+# connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
+pd.inputs.cmd_state(Quaternion([1,0,0,0]))
 connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
 connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
-
-# w_des = CartesianVector3([0.0,0.0,0.0]) # desired angular velocity
-# pd.inputs.cmd_ang_vel(w_des)
+w_des = CartesianVector3([0.0,0.0,0.0]) # desired angular velocity
+pd.inputs.cmd_ang_vel(w_des)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -377,86 +376,97 @@ torquecommand = CartesianVector3([0.0,0.0,0.0])
 
 first_step = True
 
-while not exc.isTerminated():
-    currentsimtime = exc.simTime()
-    check = currentsimtime - math.floor(currentsimtime)
+# while not exc.isTerminated():
+    # currentsimtime = exc.simTime()
+    # check = currentsimtime - math.floor(currentsimtime)
 
-    rw0.inputs.torque_com(torquecommand.get(0))
-    rw1.inputs.torque_com(torquecommand.get(1))
-    rw2.inputs.torque_com(torquecommand.get(2))
+    # rw0.inputs.torque_com(torquecommand.get(0))
+    # rw1.inputs.torque_com(torquecommand.get(1))
+    # rw2.inputs.torque_com(torquecommand.get(2))
        
-    rw0.step()
-    rw1.step()
-    rw2.step()
+    # rw0.step()
+    # rw1.step()
+    # rw2.step()
 
-    if abs(check) < tolerance:
+    # if abs(check) < tolerance:
 
-        # print("sim_time", exc.simTime(), "RW Torques:", rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
-        print(torquecommand.get(0), torquecommand.get(1), torquecommand.get(2))
-        ## Navigation
+    #     # print("sim_time", exc.simTime(), "RW Torques:", rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
+    #     print(torquecommand.get(0), torquecommand.get(1), torquecommand.get(2))
+    #     ## Navigation
 
-        ekf_prop.step()
-        process_noise.step()
-        ekf_meas.step()
+    #     ekf_prop.step()
+    #     process_noise.step()
+    #     ekf_meas.step()
 
-        ## Guidance
+    #     ## Guidance
 
-        # GPS/earth sensor
-        erf_sens.step() 
-        GPSout = erf_sens.outputs.pos_tgt_ref__out()
-        GPSnoised = CartesianVector3([0.0,0.0,0.0]) # preallocate en-noised GPS measurement
-        GPSnoise = np.random.normal(0,GPSstd,(3,1)) # noise gen
-        for i in range(3):
-            GPSnoised.set(i, GPSout.get(i) + GPSnoise[i][0])
-        # print("at time:",exc.simTime(),"gps meas:",GPSout.get(0), GPSout.get(1), GPSout.get(2))
+    #     # GPS/earth sensor
+    #     erf_sens.step() 
+    #     GPSout = erf_sens.outputs.pos_tgt_ref__out()
+    #     GPSnoised = CartesianVector3([0.0,0.0,0.0]) # preallocate en-noised GPS measurement
+    #     GPSnoise = np.random.normal(0,GPSstd,(3,1)) # noise gen
+    #     for i in range(3):
+    #         GPSnoised.set(i, GPSout.get(i) + GPSnoise[i][0])
+    #     # print("at time:",exc.simTime(),"gps meas:",GPSout.get(0), GPSout.get(1), GPSout.get(2))
 
-        # sun sensor
-        sun_sens.step()
-        sunout = sun_sens.outputs.pos_tgt_ref__out()
-        sunnorm = math.sqrt(sunout.get(0)**2 + sunout.get(1)**2 + sunout.get(2)**2)
-        # sun meas w/o noise, direction reversed to get s/c->sun vector and normalized
-        sun_noised = CartesianVector3([-1*(sunout.get(0)/sunnorm),-1*(sunout.get(1)/sunnorm),-1*(sunout.get(2)/sunnorm)])
-        # print(sun_noised.get(0), sun_noised.get(1), sun_noised.get(2))
+    #     # sun sensor
+    #     sun_sens.step()
+    #     sunout = sun_sens.outputs.pos_tgt_ref__out()
+    #     sunnorm = math.sqrt(sunout.get(0)**2 + sunout.get(1)**2 + sunout.get(2)**2)
+    #     # sun meas w/o noise, direction reversed to get s/c->sun vector and normalized
+    #     sun_noised = CartesianVector3([-1*(sunout.get(0)/sunnorm),-1*(sunout.get(1)/sunnorm),-1*(sunout.get(2)/sunnorm)])
+    #     # print(sun_noised.get(0), sun_noised.get(1), sun_noised.get(2))
         
-        # TRIAD
-        triad.inputs.desired_primary(GPSnoised)
-        triad.inputs.desired_secondary(sun_noised)
-        triad.step()
+    #     # TRIAD
+    #     triad.inputs.desired_primary(GPSnoised)
+    #     triad.inputs.desired_secondary(sun_noised)
+    #     triad.step()
 
-        ## Control
-        pd.step()
+    #     ## Control
+    #     pd.step()
         
-        # errorq = pd.outputs.error_quat()
-        # print("at time:",exc.simTime(),"error quat:",errorq.get(0), errorq.get(1), errorq.get(2), errorq.get(3))  
-        # print(exc.simTime())
-        # K = -1333333.0
-        torquecommand = pd.outputs.control_cmd()
-        # for i in range(3):
-        #     torquecommand.set(i, K*errorq.get(i+1))  # P-control only for now
+    #     # errorq = pd.outputs.error_quat()
+    #     # print("at time:",exc.simTime(),"error quat:",errorq.get(0), errorq.get(1), errorq.get(2), errorq.get(3))  
+    #     # print(exc.simTime())
+    #     # K = -1333333.0
+    #     torquecommand = pd.outputs.control_cmd()
+    #     # for i in range(3):
+    #     #     torquecommand.set(i, K*errorq.get(i+1))  # P-control only for now
 
         
 
-        # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
-
-        # exc.step()
-        # current_att = sc.outputs.quat_sc_pci()
-        # print("at time:",exc.simTime(),"attitude:",current_att.get(0),current_att.get(1),current_att.get(2),current_att.get(3))
-    exc.step()
-    # else:
-    #     rw0.inputs.torque_com(torquecommand.get(0))
-    #     rw1.inputs.torque_com(torquecommand.get(1))
-    #     rw2.inputs.torque_com(torquecommand.get(2))
-    #     rw0.step()
-    #     rw1.step()
-    #     rw2.step()
     #     # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
-    #     exc.step()
 
-    # attrn = sc.outputs.quat_sc_pci()
-    # print("Time (s):", exc.simTime(), "Attitude Quaternion:", attrn.get(0), attrn.get(1), attrn.get(2), attrn.get(3))
+    #     # exc.step()
+    #     # current_att = sc.outputs.quat_sc_pci()
+    #     # print("at time:",exc.simTime(),"attitude:",current_att.get(0),current_att.get(1),current_att.get(2),current_att.get(3))
+    # exc.step()
+    # # else:
+    # #     rw0.inputs.torque_com(torquecommand.get(0))
+    # #     rw1.inputs.torque_com(torquecommand.get(1))
+    # #     rw2.inputs.torque_com(torquecommand.get(2))
+    # #     rw0.step()
+    # #     rw1.step()
+    # #     rw2.step()
+    # #     # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
+    # #     exc.step()
 
-    # angv = sc.outputs.ang_vel_sc_pci__body()
-    # print("Time (s):", exc.simTime(), "Angular Velocity (rad/s):", angv.get(0), angv.get(1), angv.get(2))
+    # # attrn = sc.outputs.quat_sc_pci()
+    # # print("Time (s):", exc.simTime(), "Attitude Quaternion:", attrn.get(0), attrn.get(1), attrn.get(2), attrn.get(3))
+
+    # # angv = sc.outputs.ang_vel_sc_pci__body()
+    # # print("Time (s):", exc.simTime(), "Angular Velocity (rad/s):", angv.get(0), angv.get(1), angv.get(2))
+
+while not exc.isTerminated():
+    torquecommand = pd.outputs.control_cmd()
+    rw0.inputs.torque_com(-1*torquecommand.get(2))
+    rw1.inputs.torque_com(-1*torquecommand.get(0))
+    rw2.inputs.torque_com(torquecommand.get(1))
+    
+    # rw0.inputs.torque_com(torquecommand.get(0))
+    # rw1.inputs.torque_com(torquecommand.get(1))
+    # rw2.inputs.torque_com(torquecommand.get(2))
+    exc.step()
 "-------------------------------------------------------------------------------------------------------------------------------"
 
 ## OLD STUFF
