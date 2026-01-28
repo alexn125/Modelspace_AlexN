@@ -15,6 +15,7 @@ truth = pd.read_csv('results/truth.csv')
 nav = pd.read_csv('results/nav_log.csv')
 guid = pd.read_csv('results/guid_log.csv')
 cont = pd.read_csv('results/cont_log.csv')
+pos = pd.read_csv('results/pos_log.csv')
 
 ## Time vector
 sim_time = nav["time"]
@@ -138,14 +139,23 @@ plt.subplot(3,1,3)
 plt.plot(sim_time,mrp_guid_2)
 plt.title("TRIAD guidance MRP")
 
-f10 = plt.figure(10)
-plt.subplot(3,1,1)
-plt.plot(sim_time,cont["pd output_0"],sim_time,cont["torque_rw1"])
-plt.legend(['PD Output','RW Torque']) 
-plt.subplot(3,1,2)
-plt.plot(sim_time,cont["pd output_1"],sim_time,cont["torque_rw2"]) 
-plt.subplot(3,1,3)
-plt.plot(sim_time,cont["pd output_2"],sim_time,cont["torque_rw0"])
+# f10 = plt.figure(10)
+# plt.subplot(3,1,1)
+# plt.plot(sim_time,cont["pd output_0"],sim_time,cont["torque_rw1"])
+# plt.legend(['PD Output','RW Torque']) 
+# plt.subplot(3,1,2)
+# plt.plot(sim_time,cont["pd output_1"],sim_time,cont["torque_rw2"]) 
+# plt.subplot(3,1,3)
+# plt.plot(sim_time,cont["pd output_2"],sim_time,cont["torque_rw0"])
+
+f11 = plt.figure(11)
+ax = plt.axes(projection='3d')
+xline = pos["pos_sc_pci_0"]
+yline = pos["pos_sc_pci_1"]
+zline = pos["pos_sc_pci_2"]
+ax.plot3D(xline, yline, zline, 'gray')
+ax.set_title('Spacecraft Position in ECI Frame')
+ax.plot3D(0,0,0,'bo') # plot Earth center
 
 plt.show()
 

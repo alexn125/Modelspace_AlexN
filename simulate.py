@@ -103,6 +103,8 @@ with open('INIT_TLE.txt','r') as f:
 # print(earth.outputs.mu())
 ## Calculate remaining elements
 semimajoraxis = (earth.outputs.mu()/(meanmot*meanmot))**(1/3)
+print("Semimajor Axis (m):", semimajoraxis)
+period = 2*math.pi*math.sqrt((semimajoraxis**3)/earth.outputs.mu())
 
 ## Newton-Raphson to calculate eccentric anomaly
 max_iterations = 100
@@ -136,8 +138,7 @@ sc.params.inertia(Matrix3([[0.026, 0.0, 0.0],
                    [0.0, 0.06, 0.0],
                    [0.0, 0.0, 0.085]]))
 
-print("Spacecraft mass (kg):", sc.params.mass())
-print("Spacecraft MOI (kg m^2):", sc.params.inertia().get(0,1), sc.params.inertia().get(1,0), sc.params.inertia().get(2,2))
+print("Earth mu (m^3/s^2):", earth.outputs.mu())
 
 ## Initial Truth Attitude and Angular Velocity
 init_attitude_truth = MRP([0.0, 0.1, 0.0])
@@ -150,8 +151,6 @@ sc.params.initial_attitude(init_attitude_truth.toQuaternion())
 
 sc.params.initial_ang_vel(init_angvel_truth)
 sc.params.planet_ptr(earth)
-
-#! Set mass and MOI tensor
 
 ## Initial truth position and velocity from Keplerian elements
 orbels_init.params.a(semimajoraxis)
@@ -244,9 +243,9 @@ connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary
 
 "Control -----------------------------------------------------------------------------------------------------------------------"
 ## Control setup
-pd = PidAttitudeControl(exc, END_STEP, "PD")
-pd.params.P(-1/100000)
-pd.params.K(-1/20)
+# pd = PidAttitudeControl(exc, END_STEP, "PD")
+# pd.params.P(-1/100000)
+# pd.params.K(-1/20)
 
 ## Reaction wheel orientations (body frame)
 # REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
@@ -283,11 +282,11 @@ rw2.params.wheel_location__body(CartesianVector3([0.0,0.0,0.05]))
 
 ## Connecting signals
 # connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
-pd.inputs.cmd_state(Quaternion([1,0,0,0]))
-connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
-connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
-w_des = CartesianVector3([0.0,0.0,0.0]) # desired angular velocity
-pd.inputs.cmd_ang_vel(w_des)
+# pd.inputs.cmd_state(Quaternion([1,0,0,0]))
+# connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
+# connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
+# w_des = CartesianVector3([0.0,0.0,0.0]) # desired angular velocity
+# pd.inputs.cmd_ang_vel(w_des)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -320,11 +319,16 @@ exc.logManager().addLog(guidout, Time(1))
 
 contout = CsvLogger(exc, "cont_log.csv")
 contout.addParameter(exc.time().base_time,"sim_time")
-contout.addParameter(pd.outputs.control_cmd, "pd output")
+# contout.addParameter(pd.outputs.control_cmd, "pd output")
 contout.addParameter(rw0.outputs.applied_torque, "torque_rw0")
 contout.addParameter(rw1.outputs.applied_torque, "torque_rw1")
 contout.addParameter(rw2.outputs.applied_torque, "torque_rw2")
 exc.logManager().addLog(contout, Time(1))
+
+posout = CsvLogger(exc, "pos_log.csv")
+posout.addParameter(exc.time().base_time,"sim_time")
+posout.addParameter(sc.outputs.pos_sc_pci, "pos_sc_pci")
+exc.logManager().addLog(posout, Time(1))
 "-------------------------------------------------------------------------------------------------------------------------------"
 
 "Visuals -----------------------------------------------------------------------------------------------------------------------"
@@ -369,12 +373,20 @@ COV_initial.set(4, 4, 0.1)
 COV_initial.set(5, 5, 0.1)
 ekf_prop.inputs.cov_prev(COV_initial)
 
+K = 0.001
+P = 0.03
+
 ## Run simulation
 tolerance = 1e-5
 
 torquecommand = CartesianVector3([0.0,0.0,0.0])
 
 first_step = True
+second_step = True
+
+rkm0 = orbels_init.outputs.pos__inertial().get(0)
+rkm1 = orbels_init.outputs.pos__inertial().get(1)
+rkm2 = orbels_init.outputs.pos__inertial().get(2)
 
 # while not exc.isTerminated():
     # currentsimtime = exc.simTime()
@@ -457,19 +469,93 @@ first_step = True
     # # angv = sc.outputs.ang_vel_sc_pci__body()
     # # print("Time (s):", exc.simTime(), "Angular Velocity (rad/s):", angv.get(0), angv.get(1), angv.get(2))
 
-while not exc.isTerminated():
-    torquecommand = pd.outputs.control_cmd()
-    rw0.inputs.torque_com(-1*torquecommand.get(2))
-    rw1.inputs.torque_com(-1*torquecommand.get(0))
-    rw2.inputs.torque_com(torquecommand.get(1))
-    
-    # rw0.inputs.torque_com(torquecommand.get(0))
-    # rw1.inputs.torque_com(torquecommand.get(1))
-    # rw2.inputs.torque_com(torquecommand.get(2))
+while not exc.isTerminated():   
+    # torquecommand = pd.outputs.control_cmd()
+    # rw0.inputs.torque_com(-1*torquecommand.get(2))
+    # rw1.inputs.torque_com(-1*torquecommand.get(0))
+    # rw2.inputs.torque_com(torquecommand.get(1))
+
+
+
+    # exc.step()
+
+    # control calculations
+
+    # attitude estimation output
+    if not second_step:
+        MRPk = ekf_meas.outputs.att_plus_mrp_body_inertial()
+        sig0 = MRPk.get(0)
+        sig1 = MRPk.get(1)                                                                  
+        sig2 = MRPk.get(2)
+        DCMk = MRPk.toDCM()
+        s00 = DCMk.get(0,0)
+        s10 = DCMk.get(1,0)
+        s20 = DCMk.get(2,0)
+        s01 = DCMk.get(0,1)
+        s11 = DCMk.get(1,1)
+        s21 = DCMk.get(2,1)
+        s02 = DCMk.get(0,2)
+        s12 = DCMk.get(1,2)
+        s22 = DCMk.get(2,2)
+
+        wk = imu.outputs.meas_ang_vel_sf() # current angular velocity measurement
+        wk0 = wk.get(0)
+        wk1 = wk.get(1)
+        wk2 = wk.get(2)
+
+        # estimated velocity
+        vest0 = rk0-rkm0
+        vest1 = rk1-rkm1
+        vest2 = rk2-rkm2 
+
+        vestnorm = math.sqrt(vest0**2 + vest1**2 + vest2**2)
+        vest0 = vest0/(vestnorm)
+        vest1 = vest1/(vestnorm)
+        vest2 = vest2/(vestnorm)
+
+        rknorm = math.sqrt(rk0**2 + rk1**2 + rk2**2)
+        rk0n = rk0/(rknorm)
+        rk1n = rk1/(rknorm)
+        rk2n = rk2/(rknorm)
+
+        # momentum unit vector
+        hhat0 = rk1n*vest2 - rk2n*vest1
+        hhat1 = rk2n*vest0 - rk0n*vest2
+        hhat2 = rk0n*vest1 - rk1n*vest0
+
+        # desired angular velocity
+        wdes0 = ((2*math.pi)/period)*(s00*hhat0 + s01*hhat1 + s02*hhat2)
+        wdes1 = ((2*math.pi)/period)*(s10*hhat0 + s11*hhat1 + s12*hhat2)
+        wdes2 = ((2*math.pi)/period)*(s20*hhat0 + s21*hhat1 + s22*hhat2)
+
+        u0 = -1*K*sig0 - P*wk0 + P*wdes0 + wk2*wdes1 - wk1*wdes2 - wdes2*wk1 + wdes1*wk2
+        u1 = -1*K*sig1 - P*wk1 + P*wdes1 - wk2*wdes0 + wk0*wdes2 + wdes2*wk0 - wdes0*wk2
+        u2 = -1*K*sig2 - P*wk2 + P*wdes2 + wk1*wdes0 - wk0*wdes1 - wdes1*wk0 + wdes0*wk1
+
+        rw0.inputs.torque_com(-1*u2)
+        rw1.inputs.torque_com(-1*u0)
+        rw2.inputs.torque_com(u1)
+
+        rkm0 = rk0
+        rkm1 = rk1
+        rkm2 = rk2
+
     exc.step()
+    if not first_step:
+        second_step = False
+    first_step = False
+    
+    rk0 = erf_sens.outputs.pos_tgt_ref__out().get(0)
+    rk1 = erf_sens.outputs.pos_tgt_ref__out().get(1)
+    rk2 = erf_sens.outputs.pos_tgt_ref__out().get(2)
+    
+
 "-------------------------------------------------------------------------------------------------------------------------------"
 
 ## OLD STUFF
+    # pos = sc.outputs.pos_sc_pci()
+    # print("sim_time (s):", exc.simTime(), "Position (m):", pos.get(0), pos.get(1), pos.get(2))
+
 # erf_sens_noise0 = BiasNoiseModel(exc, NOT_SCHEDULED, "erf_sens_noise0")
 # erf_sens_noise0.params.noise_std(GPSstd)
 # erf_sens_noise0.params.bias(GPSbias)
