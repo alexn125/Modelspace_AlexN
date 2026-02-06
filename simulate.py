@@ -48,12 +48,16 @@ os.system('cls' if os.name == 'nt' else 'clear')
 #                     (Euler321([0.0, 0.0, 90.0*DEGREES_TO_RADIANS]).toDCM()).toQuaternion()]
 
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
+
+sim_rate = 1 # Hz
+sim_length = 100 # seconds
+
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
-exc.setRateHz(1)
-# exc.end(3600.0)
-exc.end(100.0)
+exc.setRateHz(sim_rate)
+exc.end(sim_length)
+# exc.end(100.0)
 
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
@@ -103,9 +107,9 @@ with open('INIT_TLE.txt','r') as f:
 # print(earth.outputs.mu())
 ## Calculate remaining elements
 semimajoraxis = (earth.outputs.mu()/(meanmot*meanmot))**(1/3)
-print("Semimajor Axis (m):", semimajoraxis)
+# print("Semimajor Axis (m):", semimajoraxis)
 period = 2*math.pi*math.sqrt((semimajoraxis**3)/earth.outputs.mu())
-print("Orbital Period (s):", period)
+# print("Orbital Period (s):", period)
 ## Newton-Raphson to calculate eccentric anomaly
 max_iterations = 100
 tolerance = 1e-14
@@ -138,7 +142,7 @@ sc.params.inertia(Matrix3([[0.026, 0.0, 0.0],
                    [0.0, 0.06, 0.0],
                    [0.0, 0.0, 0.085]]))
 
-print("Earth mu (m^3/s^2):", earth.outputs.mu())
+# print("Earth mu (m^3/s^2):", earth.outputs.mu())
 
 ## Initial Truth Attitude and Angular Velocity
 init_attitude_truth = MRP([0.0, 0.1, 0.0])
@@ -186,9 +190,9 @@ erf_sens.params.target_frame_ptr(sc.outputs.body())
 erf_sens.params.reference_frame_ptr(earth.outputs.inertial_frame())
 erf_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
 
-GPSstd = 500 # meters
-GPSseed = 42
-np.random.seed(GPSseed)
+# GPSstd = 500 # meters
+# GPSseed = 42
+# np.random.seed(GPSseed)
 
 ## Magnetomer
 # mag = Magnetometer(exc, "mag")
@@ -373,24 +377,47 @@ COV_initial.set(4, 4, 0.1)
 COV_initial.set(5, 5, 0.1)
 ekf_prop.inputs.cov_prev(COV_initial)
 
-K = 0.0000001
-P = 0.0000003
-
 ## Run simulation
-tolerance = 1e-5
 
 torquecommand = CartesianVector3([0.0,0.0,0.0])
 
 first_step = True
-second_step = True
+last_step = False
+## Control Gains
 
-rkm0 = orbels_init.outputs.pos__inertial().get(0)
-rkm1 = orbels_init.outputs.pos__inertial().get(1)
-rkm2 = orbels_init.outputs.pos__inertial().get(2)
+Kval = 0.001
+Pval = 0.003
 
+K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
+P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
 
+while not exc.isTerminated():
 
-while not exc.isTerminated():   
+    exc.step()
+
+    if first_step:
+        first_step = False
+        gps_pos_km1 = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
+        innit = orbels_init.outputs.pos__inertial()
+        print(gps_pos_km1)
+        print(innit.get(0), innit.get(1), innit.get(2))
+    if not first_step:
+        if exc.simTime() + (1/sim_rate) == sim_length:
+            last_step = True
+        if not last_step:
+            # Preallocation time
+            vel_est = np.zeros([3,1])
+
+            # Rough estimate of velocity from GPS position measurements (finite difference)
+            gps_pos_k = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
+
+            # print(gps_pos_k - gps_pos_km1)
+
+            vel_est = (gps_pos_k - gps_pos_km1)/(1/sim_rate)
+            # print(exc.simTime(),vel_est)
+            vel_est = vel_est/np.linalg.norm(vel_est)
+
+            gps_pos_km1 = gps_pos_k
     # torquecommand = pd.outputs.control_cmd()
     # rw0.inputs.torque_com(-1*torquecommand.get(2))
     # rw1.inputs.torque_com(-1*torquecommand.get(0))
@@ -403,81 +430,81 @@ while not exc.isTerminated():
     # control calculations
 
     # attitude estimation output
-    if not second_step:
-        MRPk = ekf_meas.outputs.att_plus_mrp_body_inertial()
-        sig0 = MRPk.get(0)
-        sig1 = MRPk.get(1)                                                                  
-        sig2 = MRPk.get(2)
+    # if not second_step:
+    #     MRPk = ekf_meas.outputs.att_plus_mrp_body_inertial()
+    #     sig0 = MRPk.get(0)
+    #     sig1 = MRPk.get(1)                                                                  
+    #     sig2 = MRPk.get(2)
 
-        DCMk = MRPk.toDCM().transpose() # specifically, DCM FROM inertial TO body
-        s00 = DCMk.get(0,0)
-        s10 = DCMk.get(1,0)
-        s20 = DCMk.get(2,0)
-        s01 = DCMk.get(0,1)
-        s11 = DCMk.get(1,1)
-        s21 = DCMk.get(2,1)
-        s02 = DCMk.get(0,2)
-        s12 = DCMk.get(1,2)
-        s22 = DCMk.get(2,2)
+    #     DCMk = MRPk.toDCM().transpose() # specifically, DCM FROM inertial TO body
+    #     s00 = DCMk.get(0,0)
+    #     s10 = DCMk.get(1,0)
+    #     s20 = DCMk.get(2,0)
+    #     s01 = DCMk.get(0,1)
+    #     s11 = DCMk.get(1,1)
+    #     s21 = DCMk.get(2,1)
+    #     s02 = DCMk.get(0,2)
+    #     s12 = DCMk.get(1,2)
+    #     s22 = DCMk.get(2,2)
 
-        wk = imu.outputs.meas_ang_vel_sf() # current angular velocity measurement
-        wk0 = wk.get(0)
-        wk1 = wk.get(1)
-        wk2 = wk.get(2)
+    #     wk = imu.outputs.meas_ang_vel_sf() # current angular velocity measurement
+    #     wk0 = wk.get(0)
+    #     wk1 = wk.get(1)
+    #     wk2 = wk.get(2)
 
-        mrp_des = triad.outputs.quat_body_ref().toMRP()
-        mrp_des0 = mrp_des.get(0)
-        mrp_des1 = mrp_des.get(1)
-        mrp_des2 = mrp_des.get(2)
+    #     mrp_des = triad.outputs.quat_body_ref().toMRP()
+    #     mrp_des0 = mrp_des.get(0)
+    #     mrp_des1 = mrp_des.get(1)
+    #     mrp_des2 = mrp_des.get(2)
         
-        # estimated velocity
-        vest0 = rk0-rkm0
-        vest1 = rk1-rkm1
-        vest2 = rk2-rkm2 
+    #     # estimated velocity
+    #     vest0 = rk0-rkm0
+    #     vest1 = rk1-rkm1
+    #     vest2 = rk2-rkm2 
 
-        vestnorm = math.sqrt(vest0**2 + vest1**2 + vest2**2)
-        vest0 = vest0/(vestnorm)
-        vest1 = vest1/(vestnorm)
-        vest2 = vest2/(vestnorm)
+    #     vestnorm = math.sqrt(vest0**2 + vest1**2 + vest2**2)
+    #     vest0 = vest0/(vestnorm)
+    #     vest1 = vest1/(vestnorm)
+    #     vest2 = vest2/(vestnorm)
 
-        rknorm = math.sqrt(rk0**2 + rk1**2 + rk2**2)
-        rk0n = rk0/(rknorm)
-        rk1n = rk1/(rknorm)
-        rk2n = rk2/(rknorm)
+    #     rknorm = math.sqrt(rk0**2 + rk1**2 + rk2**2)
+    #     rk0n = rk0/(rknorm)
+    #     rk1n = rk1/(rknorm)
+    #     rk2n = rk2/(rknorm)
 
-        # momentum unit vector
-        hhat0 = rk1n*vest2 - rk2n*vest1
-        hhat1 = rk2n*vest0 - rk0n*vest2
-        hhat2 = rk0n*vest1 - rk1n*vest0
+    #     # momentum unit vector
+    #     hhat0 = rk1n*vest2 - rk2n*vest1
+    #     hhat1 = rk2n*vest0 - rk0n*vest2
+    #     hhat2 = rk0n*vest1 - rk1n*vest0
 
-        # desired angular velocity
-        wdes0 = ((2*math.pi)/period)*(s00*hhat0 + s01*hhat1 + s02*hhat2)
-        wdes1 = ((2*math.pi)/period)*(s10*hhat0 + s11*hhat1 + s12*hhat2)
-        wdes2 = ((2*math.pi)/period)*(s20*hhat0 + s21*hhat1 + s22*hhat2)
+    #     # desired angular velocity
+    #     wdes0 = ((2*math.pi)/period)*(s00*hhat0 + s01*hhat1 + s02*hhat2)
+    #     wdes1 = ((2*math.pi)/period)*(s10*hhat0 + s11*hhat1 + s12*hhat2)
+    #     wdes2 = ((2*math.pi)/period)*(s20*hhat0 + s21*hhat1 + s22*hhat2)
 
-        # control law
-        u0 = -1*K*(sig0 - mrp_des0) - P*(wk0 - wdes0)
-        u1 = -1*K*(sig1 - mrp_des1) + P*(wk1 - wdes1)
-        u2 = -1*K*(sig2 - mrp_des2) + P*(wk2 - wdes2)
+    #     # control law
+    #     u0 = -1*K*(sig0 - mrp_des0) - P*(wk0 - wdes0)
+    #     u1 = -1*K*(sig1 - mrp_des1) + P*(wk1 - wdes1)
+    #     u2 = -1*K*(sig2 - mrp_des2) + P*(wk2 - wdes2)
 
-        print("at time:",exc.simTime(),"RW Torques (mN-m):", -1000*u2, -1000*u0, 1000*u1)
+    #     print("at time:",exc.simTime(),"RW Torques (mN-m):", -1000*u2, -1000*u0, 1000*u1)
 
-        rw0.inputs.torque_com(-1*u2)
-        rw1.inputs.torque_com(-1*u0)
-        rw2.inputs.torque_com(u1)
+    #     rw0.inputs.torque_com(-1*u2)
+    #     rw1.inputs.torque_com(-1*u0)
+    #     rw2.inputs.torque_com(u1)
 
-        rkm0 = rk0
-        rkm1 = rk1
-        rkm2 = rk2
+    #     rkm0 = rk0
+    #     rkm1 = rk1
+    #     rkm2 = rk2
 
-    exc.step()
-    if not first_step:
-        second_step = False
-    first_step = False
+        # if not first_step:
+    #     second_step = False
+    # first_step = False
     
-    rk0 = erf_sens.outputs.pos_tgt_ref__out().get(0)
-    rk1 = erf_sens.outputs.pos_tgt_ref__out().get(1)
-    rk2 = erf_sens.outputs.pos_tgt_ref__out().get(2)
+    # rk0 = erf_sens.outputs.pos_tgt_ref__out().get(0)
+    # rk1 = erf_sens.outputs.pos_tgt_ref__out().get(1)
+    # rk2 = erf_sens.outputs.pos_tgt_ref__out().get(2)  
+
     
 
 "-------------------------------------------------------------------------------------------------------------------------------"
