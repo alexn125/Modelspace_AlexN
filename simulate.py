@@ -329,10 +329,10 @@ contout.addParameter(rw1.outputs.applied_torque, "torque_rw1")
 contout.addParameter(rw2.outputs.applied_torque, "torque_rw2")
 exc.logManager().addLog(contout, Time(1))
 
-posout = CsvLogger(exc, "pos_log.csv")
-posout.addParameter(exc.time().base_time,"sim_time")
-posout.addParameter(sc.outputs.pos_sc_pci, "pos_sc_pci")
-exc.logManager().addLog(posout, Time(1))
+# posout = CsvLogger(exc, "pos_log.csv")
+# posout.addParameter(exc.time().base_time,"sim_time")
+# posout.addParameter(sc.outputs.pos_sc_pci, "pos_sc_pci")
+# exc.logManager().addLog(posout, Time(1))
 "-------------------------------------------------------------------------------------------------------------------------------"
 
 "Visuals -----------------------------------------------------------------------------------------------------------------------"
@@ -385,8 +385,8 @@ first_step = True
 last_step = False
 ## Control Gains
 
-Kval = 0.0001
-Pval = 0.0003
+Kval = 0.000001
+Pval = 0.000003
 
 K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
 P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
@@ -465,9 +465,9 @@ while not exc.isTerminated():
             u = term1 + term2 + term3
             # print(u)
             # print('-------------')
-            rw0.inputs.torque_com(-1*u[0])
-            rw1.inputs.torque_com(-1*u[1])
-            rw2.inputs.torque_com(-1*u[2])
+            # rw0.inputs.torque_com(-1*u[0])
+            # rw1.inputs.torque_com(-1*u[1])
+            # rw2.inputs.torque_com(-1*u[2])
 
             gps_pos_km1 = gps_pos_k
     if first_step:

@@ -148,14 +148,14 @@ plt.title("TRIAD guidance MRP")
 # plt.subplot(3,1,3)
 # plt.plot(sim_time,cont["pd output_2"],sim_time,cont["torque_rw0"])
 
-f11 = plt.figure(11)
-ax = plt.axes(projection='3d')
-xline = pos["pos_sc_pci_0"]
-yline = pos["pos_sc_pci_1"]
-zline = pos["pos_sc_pci_2"]
-ax.plot3D(xline, yline, zline, 'gray')
-ax.set_title('Spacecraft Position in ECI Frame')
-ax.plot3D(0,0,0,'bo') # plot Earth center
+# f11 = plt.figure(11)
+# ax = plt.axes(projection='3d')
+# xline = pos["pos_sc_pci_0"]
+# yline = pos["pos_sc_pci_1"]
+# zline = pos["pos_sc_pci_2"]
+# ax.plot3D(xline, yline, zline, 'gray')
+# ax.set_title('Spacecraft Position in ECI Frame')
+# ax.plot3D(0,0,0,'bo') # plot Earth center
 
 plt.show()
 
