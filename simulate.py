@@ -259,16 +259,16 @@ connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary
 ## Reaction wheel setup
 rw0 = ReactionWheelModel(exc, END_STEP, "rw_0")
 rw0.params.sc_body(sc.body())
-rw0.params.quat_wheel_body(Quaternion([1,0,0,0]))
+rw0.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]))
 rw0.params.mom_inertia(0.0004)
 rw0.params.peak_torque(1000)
 rw0.params.momentum_cap(1000)
 rw0.params.mass(0.115)
 rw0.params.wheel_location__body(CartesianVector3([0.05,0.0,0.0]))
-#yo
+
 rw1 = ReactionWheelModel(exc, END_STEP, "rw_1")
 rw1.params.sc_body(sc.body())
-rw1.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]))
+rw1.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),math.sin((-1*math.pi)/4),0,0]))
 rw1.params.mom_inertia(0.0004)
 rw1.params.peak_torque(1000)
 rw1.params.momentum_cap(1000)
@@ -277,7 +277,7 @@ rw1.params.wheel_location__body(CartesianVector3([0.0,0.05,0.0]))
 
 rw2 = ReactionWheelModel(exc, END_STEP, "rw_2")
 rw2.params.sc_body(sc.body())
-rw2.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),math.sin(math.pi/4),0,0]))
+rw2.params.quat_wheel_body(Quaternion([1,0,0,0]))
 rw2.params.mom_inertia(0.0004)
 rw2.params.peak_torque(1000)
 rw2.params.momentum_cap(1000)
@@ -385,8 +385,8 @@ first_step = True
 last_step = False
 ## Control Gains
 
-Kval = 0.001
-Pval = 0.003
+Kval = 0.0001
+Pval = 0.0003
 
 K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
 P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
