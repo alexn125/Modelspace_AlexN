@@ -50,7 +50,7 @@ os.system('cls' if os.name == 'nt' else 'clear')
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
 
 sim_rate = 1 # Hz
-sim_length = 100 # seconds
+sim_length = 3600 # seconds
 
 ## Simulation Executive
 exc = SimulationExecutive()
@@ -395,12 +395,6 @@ while not exc.isTerminated():
 
     exc.step()
 
-    if first_step:
-        first_step = False
-        gps_pos_km1 = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
-        innit = orbels_init.outputs.pos__inertial()
-        print(gps_pos_km1)
-        print(innit.get(0), innit.get(1), innit.get(2))
     if not first_step:
         if exc.simTime() + (1/sim_rate) == sim_length:
             last_step = True
@@ -408,16 +402,77 @@ while not exc.isTerminated():
             # Preallocation time
             vel_est = np.zeros([3,1])
 
+            # current angular velocity measurement
+            angvel = imu.outputs.meas_ang_vel_sf() 
+            w_meas = np.array([angvel.get(0), angvel.get(1), angvel.get(2)])
+
             # Rough estimate of velocity from GPS position measurements (finite difference)
             gps_pos_k = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
-
-            # print(gps_pos_k - gps_pos_km1)
-
             vel_est = (gps_pos_k - gps_pos_km1)/(1/sim_rate)
             # print(exc.simTime(),vel_est)
-            vel_est = vel_est/np.linalg.norm(vel_est)
+
+            # estimated angular momentum unit vector of orbit
+            rnorm = gps_pos_k/np.linalg.norm(gps_pos_k)
+            velnorm = vel_est/np.linalg.norm(vel_est)
+            hhat = np.cross(rnorm, velnorm)
+
+            # estimated desired angular velocity of orbit (assuming circular orbit, in the inertial frame)
+            mag = (2*math.pi)/period
+            w_des_inertial = mag*hhat
+            est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM().transpose() # DCM from inertial to body
+            DCMt = np.array([[est_att.get(0,0), est_att.get(0,1), est_att.get(0,2)],
+                            [est_att.get(1,0), est_att.get(1,1), est_att.get(1,2)],
+                            [est_att.get(2,0), est_att.get(2,1), est_att.get(2,2)]])
+            w_des = DCMt @ w_des_inertial # desired angular velocity in body frame
+            
+            # relative MRP attitude, i.e. the difference between current estimated and desired attitude
+            a1 = ekf_meas.outputs.att_plus_mrp_body_inertial() # estimated attitude
+            O1 = np.array([a1.get(0), a1.get(1), a1.get(2)])
+            b1 = triad.outputs.quat_body_ref().toMRP() # desired attitude from triad
+            O2 = np.array([b1.get(0), b1.get(1), b1.get(2)])
+
+            O1s = np.transpose(O1) @ O1               
+            O2s = np.transpose(O2) @ O2
+
+            numerator = (1 - O2s) * O1 - (1 - O1s) * O2 + 2*np.cross(O1, O2)
+            denominator = 1 + O1s*O2s + 2*np.dot(O2, O1)
+            MRPdiff = numerator/denominator
+
+            # skew symmetric matrices
+            w_meas_skew = np.array([[0, -w_meas[2], w_meas[1]],
+                                    [w_meas[2], 0, -w_meas[0]],
+                                    [-w_meas[1], w_meas[0], 0]])
+            
+            w_des_skew = np.array([[0, -w_des[2], w_des[1]],
+                                    [w_des[2], 0, -w_des[0]],
+                                    [-w_des[1], w_des[0], 0]])
+            
+            # desired angular acceleration
+            w_des_dot = np.zeros([3,1])
+
+            # control terms
+            term1 = -1*K @ MRPdiff
+            term2 = -1*P @ (w_meas - w_des)
+
+            term3a = w_meas_skew @ w_des
+            term3b = np.identity(3) @ w_meas
+
+            term3c = np.identity(3) @ term3a
+            term3d = w_des_skew @ term3b   
+
+            term3 = term3c + term3d
+           
+            u = term1 + term2 + term3
+            # print(u)
+            # print('-------------')
+            rw0.inputs.torque_com(-1*u[0])
+            rw1.inputs.torque_com(-1*u[1])
+            rw2.inputs.torque_com(-1*u[2])
 
             gps_pos_km1 = gps_pos_k
+    if first_step:
+        first_step = False
+        gps_pos_km1 = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])       
     # torquecommand = pd.outputs.control_cmd()
     # rw0.inputs.torque_com(-1*torquecommand.get(2))
     # rw1.inputs.torque_com(-1*torquecommand.get(0))
