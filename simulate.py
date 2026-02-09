@@ -265,7 +265,7 @@ rw0.params.peak_torque(1000)
 rw0.params.momentum_cap(1000)
 rw0.params.mass(0.115)
 rw0.params.wheel_location__body(CartesianVector3([0.05,0.0,0.0]))
-
+#yo
 rw1 = ReactionWheelModel(exc, END_STEP, "rw_1")
 rw1.params.sc_body(sc.body())
 rw1.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]))
