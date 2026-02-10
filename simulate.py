@@ -428,12 +428,21 @@ while not exc.isTerminated():
             # relative MRP attitude, i.e. the difference between current estimated and desired attitude
             a1 = ekf_meas.outputs.att_plus_mrp_body_inertial() # estimated attitude
             O1 = np.array([a1.get(0), a1.get(1), a1.get(2)])
-            b1 = triad.outputs.quat_body_ref().toMRP() # desired attitude from triad
-            O2 = np.array([b1.get(0), b1.get(1), b1.get(2)])
-
-            O1s = np.transpose(O1) @ O1               
+            bquat = triad.outputs.quat_body_ref() # desired attitude from triad
+            if bquat.get(0) < 0.0:
+                O2quat = np.array([-1*bquat.get(0), -1*bquat.get(1), -1*bquat.get(2), -1*bquat.get(3)])
+            else:
+                O2quat = np.array([bquat.get(0), bquat.get(1), bquat.get(2), bquat.get(3)])
+            O2 = np.zeros(3)
+            for i in range(3):
+                O2[i] = O2quat[i+1]/(1+O2quat[1])
             O2s = np.transpose(O2) @ O2
-
+            if O2s >= 1.0:
+                O2 = (-1*O2)/O2s
+                O2s = np.transpose(O2) @ O2
+            
+            O1s = np.transpose(O1) @ O1               
+            
             numerator = (1 - O2s) * O1 - (1 - O1s) * O2 + 2*np.cross(O1, O2)
             denominator = 1 + O1s*O2s + 2*np.dot(O2, O1)
             MRPdiff = numerator/denominator
@@ -465,9 +474,9 @@ while not exc.isTerminated():
             u = term1 + term2 + term3
             # print(u)
             # print('-------------')
-            # rw0.inputs.torque_com(-1*u[0])
-            # rw1.inputs.torque_com(-1*u[1])
-            # rw2.inputs.torque_com(-1*u[2])
+            rw0.inputs.torque_com(-1*u[0])
+            rw1.inputs.torque_com(-1*u[1])
+            rw2.inputs.torque_com(-1*u[2])
 
             gps_pos_km1 = gps_pos_k
     if first_step:
