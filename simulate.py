@@ -24,6 +24,8 @@ from modelspace.TriadGuidance import TriadGuidance
 from modelspace.ReactionWheelModel import ReactionWheelModel
 ## Control imports
 from modelspace.PidAttitudeControl import PidAttitudeControl
+## numpy matrix math custom functions
+from transforms import skew_sym, shadowset, MRPsubtract, quat2MRP
 
 ## MODELSPACE.PY IMPORTS --------------------------------------------------------------------------------------------------------------------------------------------------
 # Base simulation stuff
@@ -242,7 +244,8 @@ triad.inputs.current_primary_body(CartesianVector3([1.0, 0.0, 0.0]))
 triad.inputs.current_secondary_body(CartesianVector3([0.0, 1.0, 0.0]))
 connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
 connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
-
+# sunout = sun_sens.outputs.pos_tgt_ref__out()
+# triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
 "-------------------------------------------------------------------------------------------------------------------------------"
 
 "Control -----------------------------------------------------------------------------------------------------------------------"
@@ -329,6 +332,11 @@ contout.addParameter(rw1.outputs.applied_torque, "torque_rw1")
 contout.addParameter(rw2.outputs.applied_torque, "torque_rw2")
 exc.logManager().addLog(contout, Time(1))
 
+sensors = CsvLogger(exc, "sensors.csv")
+sensors.addParameter(exc.time().base_time, "time")
+sensors.addParameter(erf_sens.outputs.pos_tgt_ref__out, "earth_sen")
+sensors.addParameter(sun_sens.outputs.pos_tgt_ref__out, "sun_sen")
+exc.logManager().addLog(sensors, Time(1))
 # posout = CsvLogger(exc, "pos_log.csv")
 # posout.addParameter(exc.time().base_time,"sim_time")
 # posout.addParameter(sc.outputs.pos_sc_pci, "pos_sc_pci")
@@ -385,8 +393,8 @@ first_step = True
 last_step = False
 ## Control Gains
 
-Kval = 0.000001
-Pval = 0.000003
+Kval = 0.001
+Pval = 0.003
 
 K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
 P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
@@ -428,33 +436,22 @@ while not exc.isTerminated():
             # relative MRP attitude, i.e. the difference between current estimated and desired attitude
             a1 = ekf_meas.outputs.att_plus_mrp_body_inertial() # estimated attitude
             O1 = np.array([a1.get(0), a1.get(1), a1.get(2)])
+
             bquat = triad.outputs.quat_body_ref() # desired attitude from triad
             if bquat.get(0) < 0.0:
                 O2quat = np.array([-1*bquat.get(0), -1*bquat.get(1), -1*bquat.get(2), -1*bquat.get(3)])
             else:
                 O2quat = np.array([bquat.get(0), bquat.get(1), bquat.get(2), bquat.get(3)])
-            O2 = np.zeros(3)
-            for i in range(3):
-                O2[i] = O2quat[i+1]/(1+O2quat[1])
+            O2 = quat2MRP(O2quat)
             O2s = np.transpose(O2) @ O2
+
             if O2s >= 1.0:
-                O2 = (-1*O2)/O2s
-                O2s = np.transpose(O2) @ O2
+                O2 = shadowset(O2)
+                O2s = np.transpose(O2) @ O2  
             
             O1s = np.transpose(O1) @ O1               
-            
-            numerator = (1 - O2s) * O1 - (1 - O1s) * O2 + 2*np.cross(O1, O2)
-            denominator = 1 + O1s*O2s + 2*np.dot(O2, O1)
-            MRPdiff = numerator/denominator
 
-            # skew symmetric matrices
-            w_meas_skew = np.array([[0, -w_meas[2], w_meas[1]],
-                                    [w_meas[2], 0, -w_meas[0]],
-                                    [-w_meas[1], w_meas[0], 0]])
-            
-            w_des_skew = np.array([[0, -w_des[2], w_des[1]],
-                                    [w_des[2], 0, -w_des[0]],
-                                    [-w_des[1], w_des[0], 0]])
+            MRPdiff = MRPsubtract(O1,O2)
             
             # desired angular acceleration
             w_des_dot = np.zeros([3,1])
@@ -463,224 +460,24 @@ while not exc.isTerminated():
             term1 = -1*K @ MRPdiff
             term2 = -1*P @ (w_meas - w_des)
 
-            term3a = w_meas_skew @ w_des
-            term3b = np.identity(3) @ w_meas
+            term3a = skew_sym(w_meas) @ w_des
+            term3b = np.eye(3) @ w_meas
 
-            term3c = np.identity(3) @ term3a
-            term3d = w_des_skew @ term3b   
+            term3c = np.eye(3) @ term3a
+            term3d = skew_sym(w_des) @ term3b   
 
             term3 = term3c + term3d
            
             u = term1 + term2 + term3
+
             # print(u)
             # print('-------------')
-            rw0.inputs.torque_com(-1*u[0])
-            rw1.inputs.torque_com(-1*u[1])
-            rw2.inputs.torque_com(-1*u[2])
+            # rw0.inputs.torque_com(-1*u[0])
+            # rw1.inputs.torque_com(-1*u[1])
+            # rw2.inputs.torque_com(-1*u[2])
 
             gps_pos_km1 = gps_pos_k
     if first_step:
         first_step = False
         gps_pos_km1 = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])       
-    # torquecommand = pd.outputs.control_cmd()
-    # rw0.inputs.torque_com(-1*torquecommand.get(2))
-    # rw1.inputs.torque_com(-1*torquecommand.get(0))
-    # rw2.inputs.torque_com(torquecommand.get(1))
-
-
-
-    # exc.step()
-
-    # control calculations
-
-    # attitude estimation output
-    # if not second_step:
-    #     MRPk = ekf_meas.outputs.att_plus_mrp_body_inertial()
-    #     sig0 = MRPk.get(0)
-    #     sig1 = MRPk.get(1)                                                                  
-    #     sig2 = MRPk.get(2)
-
-    #     DCMk = MRPk.toDCM().transpose() # specifically, DCM FROM inertial TO body
-    #     s00 = DCMk.get(0,0)
-    #     s10 = DCMk.get(1,0)
-    #     s20 = DCMk.get(2,0)
-    #     s01 = DCMk.get(0,1)
-    #     s11 = DCMk.get(1,1)
-    #     s21 = DCMk.get(2,1)
-    #     s02 = DCMk.get(0,2)
-    #     s12 = DCMk.get(1,2)
-    #     s22 = DCMk.get(2,2)
-
-    #     wk = imu.outputs.meas_ang_vel_sf() # current angular velocity measurement
-    #     wk0 = wk.get(0)
-    #     wk1 = wk.get(1)
-    #     wk2 = wk.get(2)
-
-    #     mrp_des = triad.outputs.quat_body_ref().toMRP()
-    #     mrp_des0 = mrp_des.get(0)
-    #     mrp_des1 = mrp_des.get(1)
-    #     mrp_des2 = mrp_des.get(2)
-        
-    #     # estimated velocity
-    #     vest0 = rk0-rkm0
-    #     vest1 = rk1-rkm1
-    #     vest2 = rk2-rkm2 
-
-    #     vestnorm = math.sqrt(vest0**2 + vest1**2 + vest2**2)
-    #     vest0 = vest0/(vestnorm)
-    #     vest1 = vest1/(vestnorm)
-    #     vest2 = vest2/(vestnorm)
-
-    #     rknorm = math.sqrt(rk0**2 + rk1**2 + rk2**2)
-    #     rk0n = rk0/(rknorm)
-    #     rk1n = rk1/(rknorm)
-    #     rk2n = rk2/(rknorm)
-
-    #     # momentum unit vector
-    #     hhat0 = rk1n*vest2 - rk2n*vest1
-    #     hhat1 = rk2n*vest0 - rk0n*vest2
-    #     hhat2 = rk0n*vest1 - rk1n*vest0
-
-    #     # desired angular velocity
-    #     wdes0 = ((2*math.pi)/period)*(s00*hhat0 + s01*hhat1 + s02*hhat2)
-    #     wdes1 = ((2*math.pi)/period)*(s10*hhat0 + s11*hhat1 + s12*hhat2)
-    #     wdes2 = ((2*math.pi)/period)*(s20*hhat0 + s21*hhat1 + s22*hhat2)
-
-    #     # control law
-    #     u0 = -1*K*(sig0 - mrp_des0) - P*(wk0 - wdes0)
-    #     u1 = -1*K*(sig1 - mrp_des1) + P*(wk1 - wdes1)
-    #     u2 = -1*K*(sig2 - mrp_des2) + P*(wk2 - wdes2)
-
-    #     print("at time:",exc.simTime(),"RW Torques (mN-m):", -1000*u2, -1000*u0, 1000*u1)
-
-    #     rw0.inputs.torque_com(-1*u2)
-    #     rw1.inputs.torque_com(-1*u0)
-    #     rw2.inputs.torque_com(u1)
-
-    #     rkm0 = rk0
-    #     rkm1 = rk1
-    #     rkm2 = rk2
-
-        # if not first_step:
-    #     second_step = False
-    # first_step = False
     
-    # rk0 = erf_sens.outputs.pos_tgt_ref__out().get(0)
-    # rk1 = erf_sens.outputs.pos_tgt_ref__out().get(1)
-    # rk2 = erf_sens.outputs.pos_tgt_ref__out().get(2)  
-
-    
-
-"-------------------------------------------------------------------------------------------------------------------------------"
-
-# while not exc.isTerminated():
-    # currentsimtime = exc.simTime()
-    # check = currentsimtime - math.floor(currentsimtime)
-
-    # rw0.inputs.torque_com(torquecommand.get(0))
-    # rw1.inputs.torque_com(torquecommand.get(1))
-    # rw2.inputs.torque_com(torquecommand.get(2))
-       
-    # rw0.step()
-    # rw1.step()
-    # rw2.step()
-
-    # if abs(check) < tolerance:
-
-    #     # print("sim_time", exc.simTime(), "RW Torques:", rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
-    #     print(torquecommand.get(0), torquecommand.get(1), torquecommand.get(2))
-    #     ## Navigation
-
-    #     ekf_prop.step()
-    #     process_noise.step()
-    #     ekf_meas.step()
-
-    #     ## Guidance
-
-    #     # GPS/earth sensor
-    #     erf_sens.step() 
-    #     GPSout = erf_sens.outputs.pos_tgt_ref__out()
-    #     GPSnoised = CartesianVector3([0.0,0.0,0.0]) # preallocate en-noised GPS measurement
-    #     GPSnoise = np.random.normal(0,GPSstd,(3,1)) # noise gen
-    #     for i in range(3):
-    #         GPSnoised.set(i, GPSout.get(i) + GPSnoise[i][0])
-    #     # print("at time:",exc.simTime(),"gps meas:",GPSout.get(0), GPSout.get(1), GPSout.get(2))
-
-    #     # sun sensor
-    #     sun_sens.step()
-    #     sunout = sun_sens.outputs.pos_tgt_ref__out()
-    #     sunnorm = math.sqrt(sunout.get(0)**2 + sunout.get(1)**2 + sunout.get(2)**2)
-    #     # sun meas w/o noise, direction reversed to get s/c->sun vector and normalized
-    #     sun_noised = CartesianVector3([-1*(sunout.get(0)/sunnorm),-1*(sunout.get(1)/sunnorm),-1*(sunout.get(2)/sunnorm)])
-    #     # print(sun_noised.get(0), sun_noised.get(1), sun_noised.get(2))
-        
-    #     # TRIAD
-    #     triad.inputs.desired_primary(GPSnoised)
-    #     triad.inputs.desired_secondary(sun_noised)
-    #     triad.step()
-
-    #     ## Control
-    #     pd.step()
-        
-    #     # errorq = pd.outputs.error_quat()
-    #     # print("at time:",exc.simTime(),"error quat:",errorq.get(0), errorq.get(1), errorq.get(2), errorq.get(3))  
-    #     # print(exc.simTime())
-    #     # K = -1333333.0
-    #     torquecommand = pd.outputs.control_cmd()
-    #     # for i in range(3):
-    #     #     torquecommand.set(i, K*errorq.get(i+1))  # P-control only for now
-
-        
-
-    #     # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
-
-    #     # exc.step()
-    #     # current_att = sc.outputs.quat_sc_pci()
-    #     # print("at time:",exc.simTime(),"attitude:",current_att.get(0),current_att.get(1),current_att.get(2),current_att.get(3))
-    # exc.step()
-    # # else:
-    # #     rw0.inputs.torque_com(torquecommand.get(0))
-    # #     rw1.inputs.torque_com(torquecommand.get(1))
-    # #     rw2.inputs.torque_com(torquecommand.get(2))
-    # #     rw0.step()
-    # #     rw1.step()
-    # #     rw2.step()
-    # #     # print(rw0.outputs.applied_torque(), rw1.outputs.applied_torque(), rw2.outputs.applied_torque())
-    # #     exc.step()
-
-    # # attrn = sc.outputs.quat_sc_pci()
-    # # print("Time (s):", exc.simTime(), "Attitude Quaternion:", attrn.get(0), attrn.get(1), attrn.get(2), attrn.get(3))
-
-    # # angv = sc.outputs.ang_vel_sc_pci__body()
-    # # print("Time (s):", exc.simTime(), "Angular Velocity (rad/s):", angv.get(0), angv.get(1), angv.get(2))
-
-## OLD STUFF
-    # pos = sc.outputs.pos_sc_pci()
-    # print("sim_time (s):", exc.simTime(), "Position (m):", pos.get(0), pos.get(1), pos.get(2))
-
-# erf_sens_noise0 = BiasNoiseModel(exc, NOT_SCHEDULED, "erf_sens_noise0")
-# erf_sens_noise0.params.noise_std(GPSstd)
-# erf_sens_noise0.params.bias(GPSbias)
-# erf_sens_noise0.params.seed_value(GPSseed)
-
-# erf_sens_noise1 = BiasNoiseModel(exc, NOT_SCHEDULED, "erf_sens_noise1")
-# erf_sens_noise1.params.noise_std(GPSstd)
-# erf_sens_noise1.params.bias(GPSbias)
-# erf_sens_noise1.params.seed_value(GPSseed + 1)
-
-# erf_sens_noise2 = BiasNoiseModel(exc, NOT_SCHEDULED, "erf_sens_noise2")
-# erf_sens_noise2.params.noise_std(GPSstd)
-# erf_sens_noise2.params.bias(GPSbias)
-# erf_sens_noise2.params.seed_value(GPSseed + 2)      
-
-# print("Semimajor Axis (m):", semimajoraxis)
-# print("Eccentricity:", ecc)
-# print("Inclination (deg):", inclination)
-# print("RAAN (deg):", raan)
-# print("Argument of Perigee (deg):", argofp)
-# print("True Anomaly (deg):", trueAnom*RADIANS_TO_DEGREES)
-
-
-#  u0 = -1*K*sig0 - P*wk0 + P*wdes0 + wk2*wdes1 - wk1*wdes2 - wdes2*wk1 + wdes1*wk2
-#         u1 = -1*K*sig1 - P*wk1 + P*wdes1 - wk2*wdes0 + wk0*wdes2 + wdes2*wk0 - wdes0*wk2
-#         u2 = -1*K*sig2 - P*wk2 + P*wdes2 + wk1*wdes0 - wk0*wdes1 - wdes1*wk0 + wdes0*wk1
