@@ -10,6 +10,7 @@ from modelspaceutils.AutoDocPy import AutoDocPy
 from modelspaceutils.analysisutils import plotStateAndCovariance
 import matplotlib.pyplot as plt
 from modelspace.ModelSpacePy import Quaternion, MRP
+from transforms import *
 
 truth = pd.read_csv('results/truth.csv')
 nav = pd.read_csv('results/nav_log.csv')
@@ -46,7 +47,7 @@ for i in range(len(truth["quat_true_0"])):
     v2 = guidcurrent.get(2)
     v3 = guidcurrent.get(3)
     if scalar < 0.0:
-        mrpguidcurrent = Quaternion([-1*scalar, -1*v1, -1*v2, -1* v3]).toMRP()
+        mrpguidcurrent = Quaternion([-1*scalar, -1*v1, -1*v2, -1*v3]).toMRP()
     else:
         mrpguidcurrent = Quaternion([scalar,v1,v2,v3]).toMRP()    
 
@@ -89,9 +90,18 @@ plt.subplot(3,1,2)
 plt.plot(sim_time,truth['angvel_true_1'])
 plt.subplot(3,1,3)
 plt.plot(sim_time,truth['angvel_true_2'])
-plt.title("Truth Angular Velocity")
-                        
-# f2 = plt.figure(2)
+plt.title("TruthAngular Velocity")
+
+f15 = plt.figure(15)
+plt.subplot(3,1,1)
+plt.plot(sim_time,sen['gyro_sen_0'])
+plt.subplot(3,1,2)
+plt.plot(sim_time,sen['gyro_sen_1'])
+plt.subplot(3,1,3)
+plt.plot(sim_time,sen['gyro_sen_2'])
+plt.title("Gyro Sensor Measurement")        
+
+# f3 = plt.figure(3)
 # plt.subplot(3,1,1)
 # plt.plot(sim_time,nav['mrp_minus_0'])
 # plt.subplot(3,1,2)
