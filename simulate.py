@@ -26,6 +26,7 @@ from modelspace.ReactionWheelModel import ReactionWheelModel
 from modelspace.PidAttitudeControl import PidAttitudeControl
 ## numpy matrix math custom functions
 from transforms import skew_sym, shadowset, MRPsubtract, quat2MRP
+import matplotlib.pyplot as plt
 
 ## MODELSPACE.PY IMPORTS --------------------------------------------------------------------------------------------------------------------------------------------------
 # Base simulation stuff
@@ -243,8 +244,7 @@ triad = TriadGuidance(exc, END_STEP, "triad")
 triad.inputs.current_primary_body(CartesianVector3([1.0, 0.0, 0.0]))
 triad.inputs.current_secondary_body(CartesianVector3([0.0, 1.0, 0.0]))
 connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
-connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
-# sunout = sun_sens.outputs.pos_tgt_ref__out()
+# connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary)
 # triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -260,7 +260,7 @@ connectSignals(sun_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_secondary
 #                     Quaternion([1,0,0,0])]
 
 ## Reaction wheel setup
-rw0 = ReactionWheelModel(exc, END_STEP, "rw_0")
+rw0 = ReactionWheelModel(exc, END_STEP, "rw_0") # x pointing
 rw0.params.sc_body(sc.body())
 rw0.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]))
 rw0.params.mom_inertia(0.0004)
@@ -269,16 +269,16 @@ rw0.params.momentum_cap(1000)
 rw0.params.mass(0.115)
 rw0.params.wheel_location__body(CartesianVector3([0.05,0.0,0.0]))
 
-rw1 = ReactionWheelModel(exc, END_STEP, "rw_1")
+rw1 = ReactionWheelModel(exc, END_STEP, "rw_1") # y pointing
 rw1.params.sc_body(sc.body())
-rw1.params.quat_wheel_body(Quaternion([math.cos(math.pi/4),math.sin((-1*math.pi)/4),0,0]))
+rw1.params.quat_wheel_body(Quaternion([math.cos((-1*math.pi)/4),math.sin((-1*math.pi)/4),0,0]))
 rw1.params.mom_inertia(0.0004)
 rw1.params.peak_torque(1000)
 rw1.params.momentum_cap(1000)
 rw1.params.mass(0.115)
 rw1.params.wheel_location__body(CartesianVector3([0.0,0.05,0.0]))
 
-rw2 = ReactionWheelModel(exc, END_STEP, "rw_2")
+rw2 = ReactionWheelModel(exc, END_STEP, "rw_2") # z pointing
 rw2.params.sc_body(sc.body())
 rw2.params.quat_wheel_body(Quaternion([1,0,0,0]))
 rw2.params.mom_inertia(0.0004)
@@ -322,6 +322,7 @@ exc.logManager().addLog(navout, Time(1))
 guidout = CsvLogger(exc, "guid_log.csv")
 guidout.addParameter(exc.time().base_time, "time")
 guidout.addParameter(triad.outputs.quat_body_ref,"quat_body_ref")     
+guidout.addParameter(triad.inputs.desired_secondary, "sun_pnt")
 exc.logManager().addLog(guidout, Time(1))
 
 contout = CsvLogger(exc, "cont_log.csv")
@@ -387,7 +388,7 @@ ekf_prop.inputs.cov_prev(COV_initial)
 
 ## Run simulation
 
-torquecommand = CartesianVector3([0.0,0.0,0.0])
+triad.inputs.desired_secondary(CartesianVector3([0.0, 1.0, 0.0]))
 
 first_step = True
 last_step = False
@@ -399,7 +400,21 @@ Pval = 0.003
 K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
 P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
 
+its = 0
+max_its = int(sim_length*(1/sim_rate) + 1)
+
+MRPerrorhistory0 = []
+MRPerrorhistory1 = []
+MRPerrorhistory2 = []
+time_vec = []
+ 
+MRPdiff = np.array([0.0,0.0,0.0])
+
 while not exc.isTerminated():
+    MRPerrorhistory0.append(MRPdiff[0])
+    MRPerrorhistory1.append(MRPdiff[1])
+    MRPerrorhistory2.append(MRPdiff[2])
+    time_vec.append(float(its))
 
     exc.step()
 
@@ -454,16 +469,16 @@ while not exc.isTerminated():
             MRPdiff = MRPsubtract(O1,O2)
             
             # desired angular acceleration
-            w_des_dot = np.zeros([3,1])
+            w_des_dot = np.array([0.0, 0.0, 0.0])
 
             # control terms
             term1 = -1*K @ MRPdiff
             term2 = -1*P @ (w_meas - w_des)
 
-            term3a = skew_sym(w_meas) @ w_des
-            term3b = np.eye(3) @ w_meas
-
+            term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
             term3c = np.eye(3) @ term3a
+            
+            term3b = np.eye(3) @ w_meas
             term3d = skew_sym(w_des) @ term3b   
 
             term3 = term3c + term3d
@@ -472,12 +487,26 @@ while not exc.isTerminated():
 
             # print(u)
             # print('-------------')
-            # rw0.inputs.torque_com(-1*u[0])
-            # rw1.inputs.torque_com(-1*u[1])
-            # rw2.inputs.torque_com(-1*u[2])
+            rw0.inputs.torque_com(-1*u[0])
+            rw1.inputs.torque_com(-1*u[1])
+            rw2.inputs.torque_com(-1*u[2])
 
             gps_pos_km1 = gps_pos_k
     if first_step:
         first_step = False
         gps_pos_km1 = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])       
     
+    sunout = sun_sens.outputs.pos_tgt_ref__out()
+    triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
+    its += 1
+
+## Plotting
+
+f1 = plt.figure(1)
+plt.subplot(3,1,1)
+plt.plot(time_vec,MRPerrorhistory0)
+plt.subplot(3,1,2)
+plt.plot(time_vec,MRPerrorhistory1)
+plt.subplot(3,1,3)
+plt.plot(time_vec,MRPerrorhistory2)
+plt.show()
