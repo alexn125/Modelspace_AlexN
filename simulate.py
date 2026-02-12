@@ -53,7 +53,7 @@ os.system('cls' if os.name == 'nt' else 'clear')
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
 
 sim_rate = 1 # Hz
-sim_length = 2400 # seconds
+sim_length = 3600 # seconds
 
 ## Simulation Executive
 exc = SimulationExecutive()
@@ -181,14 +181,14 @@ orbels_init.params.f(trueAnom)
 ## Star Tracker
 st = StarTracker(exc, START_STEP, "st")
 st.configureFromDefault("Arcsec_Sagitta")
-st.params.mount_frame(sc.outputs.body())
+st.params.mount_frame(sc.body())
 st.params.reference_frame(earth.outputs.inertial_frame())
 
 ## IMU
 imu = IMU(exc, START_STEP, "imu")
-imu.params.mount_frame(sc.outputs.body())
-# imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
-imu.params.gyro_bias(CartesianVector3([0.0, 0.0, 0.0]))
+imu.params.mount_frame(sc.body())
+imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
+# imu.params.gyro_bias(CartesianVector3([0.0, 0.0, 0.0]))
 ## Sun Sensor
 sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
 sun_sens.params.target_frame_ptr(sc.outputs.body())
@@ -242,7 +242,7 @@ connectSignals(process_noise.outputs.cov_post_snc, ekf_meas.inputs.cov_minus)
 connectSignals(ekf_meas.outputs.att_plus_mrp_body_inertial, ekf_prop.inputs.mrp_prev_body_inertial)
 connectSignals(ekf_meas.outputs.bias_plus, ekf_prop.inputs.gyro_bias)
 connectSignals(ekf_meas.outputs.cov_plus, ekf_prop.inputs.cov_prev)
-# connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_inertial)
+connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_inertial)
 # connectSignals(sc.outputs.ang_vel_sc_pci__body,ekf_prop.inputs.ang_vel_meas_body_inertial)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
@@ -407,8 +407,8 @@ last_step = False
 
 ## Control Gains
 
-Kval = 0.001
-Pval = 0.003
+Kval = 0.0001
+Pval = 0.0003
 
 K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
 P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
@@ -467,7 +467,7 @@ while not exc.isTerminated():
             # current angular velocity measurement
             angvel = imu.outputs.meas_ang_vel_sf()
             w_meas_i = np.array([angvel.get(0), angvel.get(1), angvel.get(2)])
-            w_meas = DCMt @ w_meas_i # measured angular velocity in body frame
+            # w_meas = DCMt @ w_meas_i # measured angular velocity in body frame
 
             # relative MRP attitude, i.e. the difference between current estimated and desired attitude
             a1 = ekf_meas.outputs.att_plus_mrp_body_inertial() # estimated attitude
@@ -487,19 +487,30 @@ while not exc.isTerminated():
                 O2s = np.transpose(O2) @ O2  
             
             MRPdiff = MRPsubtract(O1,O2)
-            
+            if np.transpose(MRPdiff) @ MRPdiff >= 1.0:
+                MRPdiff = shadowset(MRPdiff)
+                
+            # wdiff = w_meas - w_des
+            wdiff = w_meas_i - w_des_inertial
+
             # desired angular acceleration
             w_des_dot = np.array([0.0, 0.0, 0.0])
 
             # control terms
             term1 = -1*K @ MRPdiff
-            term2 = -1*P @ (w_meas - w_des)
+            term2 = -1*P @ wdiff
 
-            term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
+            term3a = (w_des_dot - skew_sym(w_meas_i) @ w_des_inertial)
             term3c = J @ term3a
+
+            term3b = J @ w_meas_i
+            term3d = skew_sym(w_des_inertial) @ term3b
+
+            # term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
+            # term3c = J @ term3a
             
-            term3b = J @ w_meas
-            term3d = skew_sym(w_des) @ term3b   
+            # term3b = J @ w_meas
+            # term3d = skew_sym(w_des) @ term3b   
 
             term3 = term3c + term3d
            
@@ -518,12 +529,12 @@ while not exc.isTerminated():
     if first_step:
         first_step = False
         gps_pos_km1 = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])       
-        w_meas = np.array([imu.outputs.meas_ang_vel_sf().get(0), imu.outputs.meas_ang_vel_sf().get(1), imu.outputs.meas_ang_vel_sf().get(2)])
+        # w_meas = np.array([imu.outputs.meas_ang_vel_sf().get(0), imu.outputs.meas_ang_vel_sf().get(1), imu.outputs.meas_ang_vel_sf().get(2)])
 
 
     sunout = sun_sens.outputs.pos_tgt_ref__out()
     triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
-    ekf_prop.inputs.ang_vel_meas_body_inertial(CartesianVector3([w_meas[0], w_meas[1], w_meas[2]]))
+    # ekf_prop.inputs.ang_vel_meas_body_inertial(CartesianVector3([w_meas[0], w_meas[1], w_meas[2]]))
     its += 1
 
 ## Plotting
@@ -535,6 +546,7 @@ plt.subplot(3,1,2)
 plt.plot(time_vec,MRPerrorhistory1)
 plt.subplot(3,1,3)
 plt.plot(time_vec,MRPerrorhistory2)
+plt.title('MRP control error history')
 
 
 f2 = plt.figure(2)
@@ -544,4 +556,6 @@ plt.subplot(3,1,2)
 plt.plot(time_vec,commandhistory1)
 plt.subplot(3,1,3)
 plt.plot(time_vec,commandhistory2)
+plt.title("Torque command history")
+
 plt.show()
