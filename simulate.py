@@ -5,6 +5,7 @@ Alex Newett - Modelspace GNC Research 2025
 ## Important stuff
 import sys, math, os
 import numpy as np
+import pandas as pd
 ## Basic imports
 from modelspace.Spacecraft import Spacecraft
 from modelspace.CustomPlanet import CustomPlanet
@@ -188,16 +189,16 @@ st.params.reference_frame(earth.outputs.inertial_frame())
 imu = IMU(exc, START_STEP, "imu")
 imu.params.mount_frame(sc.body())
 imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
-# imu.params.gyro_bias(CartesianVector3([0.0, 0.0, 0.0]))
+
 ## Sun Sensor
 sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
-sun_sens.params.target_frame_ptr(sc.outputs.body())
+sun_sens.params.target_frame_ptr(sc.body())
 sun_sens.params.reference_frame_ptr(sun.outputs.inertial_frame())
 sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 
 ## GPS/Earth Sensor
 erf_sens = FrameStateSensorModel(exc, START_STEP, "erf_sens")
-erf_sens.params.target_frame_ptr(sc.outputs.body())
+erf_sens.params.target_frame_ptr(sc.body())
 erf_sens.params.reference_frame_ptr(earth.outputs.inertial_frame())
 erf_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
 
@@ -407,8 +408,8 @@ last_step = False
 
 ## Control Gains
 
-Kval = 0.0001
-Pval = 0.0003
+Kval = 0.001
+Pval = 0.003
 
 K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
 P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
@@ -419,13 +420,25 @@ max_its = int(sim_length*(1/sim_rate) + 1)
 MRPerrorhistory0 = []
 MRPerrorhistory1 = []
 MRPerrorhistory2 = []
+
 commandhistory0 = []
 commandhistory1 = []
 commandhistory2 = []
+
+wmeashistory0 = []
+wmeashistory1 = []
+wmeashistory2 = []
+
+
+
+
+
+
 time_vec = []
  
 MRPdiff = np.array([0.0,0.0,0.0])
 u = np.array([0.0,0.0,0.0])
+w_meas = np.array([0.0,0.0,0.0])
 
 while not exc.isTerminated():
     MRPerrorhistory0.append(MRPdiff[0])
@@ -434,6 +447,9 @@ while not exc.isTerminated():
     commandhistory0.append(u[0])
     commandhistory1.append(u[1])
     commandhistory2.append(u[2])
+    wmeashistory0.append(w_meas[0])
+    wmeashistory1.append(w_meas[1])
+    wmeashistory2.append(w_meas[2])
     time_vec.append(float(its))
 
     exc.step()
@@ -466,7 +482,7 @@ while not exc.isTerminated():
             
             # current angular velocity measurement
             angvel = imu.outputs.meas_ang_vel_sf()
-            w_meas_i = np.array([angvel.get(0), angvel.get(1), angvel.get(2)])
+            w_meas = np.array([angvel.get(0), angvel.get(1), angvel.get(2)])
             # w_meas = DCMt @ w_meas_i # measured angular velocity in body frame
 
             # relative MRP attitude, i.e. the difference between current estimated and desired attitude
@@ -491,7 +507,8 @@ while not exc.isTerminated():
                 MRPdiff = shadowset(MRPdiff)
                 
             # wdiff = w_meas - w_des
-            wdiff = w_meas_i - w_des_inertial
+            print(w_meas)
+            wdiff = w_meas - w_des_inertial
 
             # desired angular acceleration
             w_des_dot = np.array([0.0, 0.0, 0.0])
@@ -500,17 +517,17 @@ while not exc.isTerminated():
             term1 = -1*K @ MRPdiff
             term2 = -1*P @ wdiff
 
-            term3a = (w_des_dot - skew_sym(w_meas_i) @ w_des_inertial)
-            term3c = J @ term3a
-
-            term3b = J @ w_meas_i
-            term3d = skew_sym(w_des_inertial) @ term3b
-
-            # term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
+            # term3a = (w_des_dot - skew_sym(w_meas_i) @ w_des_inertial)
             # term3c = J @ term3a
+
+            # term3b = J @ w_meas_i
+            # term3d = skew_sym(w_des_inertial) @ term3b
+
+            term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
+            term3c = J @ term3a
             
-            # term3b = J @ w_meas
-            # term3d = skew_sym(w_des) @ term3b   
+            term3b = J @ w_meas
+            term3d = skew_sym(w_des) @ term3b   
 
             term3 = term3c + term3d
            
@@ -518,12 +535,12 @@ while not exc.isTerminated():
 
             # print(u)
             # print('-------------')
-            # rw0.inputs.torque_com(-1*u[0])
-            # rw1.inputs.torque_com(-1*u[1])
-            # rw2.inputs.torque_com(-1*u[2])
-            rw0.inputs.torque_com(0.0)
-            rw1.inputs.torque_com(0.0)
-            rw2.inputs.torque_com(0.0)
+            rw0.inputs.torque_com(-1*u[0])
+            rw1.inputs.torque_com(-1*u[1])
+            rw2.inputs.torque_com(-1*u[2])
+            # rw0.inputs.torque_com(0.0)
+            # rw1.inputs.torque_com(0.0)
+            # rw2.inputs.torque_com(0.0)
 
             gps_pos_km1 = gps_pos_k
     if first_step:
@@ -539,23 +556,27 @@ while not exc.isTerminated():
 
 ## Plotting
 
-f1 = plt.figure(1)
-plt.subplot(3,1,1)
-plt.plot(time_vec,MRPerrorhistory0)
-plt.subplot(3,1,2)
-plt.plot(time_vec,MRPerrorhistory1)
-plt.subplot(3,1,3)
-plt.plot(time_vec,MRPerrorhistory2)
-plt.title('MRP control error history')
+mrper = pd.DataFrame(data={"time": time_vec, "MRP0": MRPerrorhistory0, "MRP1": MRPerrorhistory1, "MRP2": MRPerrorhistory2})
+mrper.to_csv("results/MRPerror.csv",sep=',',index=False)
 
 
-f2 = plt.figure(2)
+# f2 = plt.figure(2)
+# plt.subplot(3,1,1)
+# plt.plot(time_vec,commandhistory0)
+# plt.subplot(3,1,2)
+# plt.plot(time_vec,commandhistory1)
+# plt.subplot(3,1,3)
+# plt.plot(time_vec,commandhistory2)
+# plt.title("Torque command history")
+
+f3 = plt.figure(3)
 plt.subplot(3,1,1)
-plt.plot(time_vec,commandhistory0)
+plt.plot(time_vec,wmeashistory0)
 plt.subplot(3,1,2)
-plt.plot(time_vec,commandhistory1)
+plt.plot(time_vec,wmeashistory1)
 plt.subplot(3,1,3)
-plt.plot(time_vec,commandhistory2)
-plt.title("Torque command history")
+plt.plot(time_vec,wmeashistory2)
+plt.title("Measured angular velocity (body frame) history")
+
 
 plt.show()
