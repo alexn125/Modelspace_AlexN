@@ -19,6 +19,8 @@ cont = pd.read_csv('results/cont_log.csv')
 pos = pd.read_csv('results/pos_log.csv')
 sen = pd.read_csv('results/sensors.csv')
 mrper = pd.read_csv('results/MRPerror.csv')
+cmdh = pd.read_csv('results/commandhistory.csv')
+gyroh = pd.read_csv('results/gyrohistory.csv')
 
 ## Time vector
 sim_time = nav["time"]
@@ -199,6 +201,24 @@ plt.plot(mrper['time'],mrper['MRP1'])
 plt.subplot(3,1,3)
 plt.plot(mrper['time'],mrper['MRP2'])
 plt.title('MRP control error history')
+
+f101 = plt.figure(101)
+plt.subplot(3,1,1)
+plt.plot(gyroh['time'],gyroh['gyro0'])
+plt.subplot(3,1,2)
+plt.plot(gyroh['time'],gyroh['gyro1'])
+plt.subplot(3,1,3)
+plt.plot(gyroh['time'],gyroh['gyro2'])
+plt.title('Gyro measurement history')
+
+f102 = plt.figure(102)
+plt.subplot(3,1,1)
+plt.plot(cmdh['time'],cmdh['cmd0'])
+plt.subplot(3,1,2)
+plt.plot(cmdh['time'],cmdh['cmd1'])
+plt.subplot(3,1,3)
+plt.plot(cmdh['time'],cmdh['cmd2'])
+plt.title('Command history')
 
 plt.show()
 

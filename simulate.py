@@ -409,10 +409,14 @@ last_step = False
 ## Control Gains
 
 Kval = 0.001
-Pval = 0.003
+Pvalc = 0.003
+Pval0 = 0.00173
+Pval1 = 0.004
+Pval2 = 0.00566
 
-K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
-P = np.array([[Pval, 0, 0], [0, Pval, 0], [0, 0, Pval]])
+# K = np.array([[Kval, 0, 0], [0, Kval, 0], [0, 0, Kval]])
+# P = np.array([[Pval0, 0, 0], [0, Pval1, 0], [0, 0, Pval2]])
+P = np.array([[Pvalc, 0, 0], [0, Pvalc, 0], [0, 0, Pvalc]])
 
 its = 0
 max_its = int(sim_length*(1/sim_rate) + 1)
@@ -429,11 +433,6 @@ wmeashistory0 = []
 wmeashistory1 = []
 wmeashistory2 = []
 
-
-
-
-
-
 time_vec = []
  
 MRPdiff = np.array([0.0,0.0,0.0])
@@ -444,9 +443,9 @@ while not exc.isTerminated():
     MRPerrorhistory0.append(MRPdiff[0])
     MRPerrorhistory1.append(MRPdiff[1])
     MRPerrorhistory2.append(MRPdiff[2])
-    commandhistory0.append(u[0])
-    commandhistory1.append(u[1])
-    commandhistory2.append(u[2])
+    commandhistory0.append(-1*u[0])
+    commandhistory1.append(-1*u[1])
+    commandhistory2.append(-1*u[2])
     wmeashistory0.append(w_meas[0])
     wmeashistory1.append(w_meas[1])
     wmeashistory2.append(w_meas[2])
@@ -514,7 +513,7 @@ while not exc.isTerminated():
             w_des_dot = np.array([0.0, 0.0, 0.0])
 
             # control terms
-            term1 = -1*K @ MRPdiff
+            term1 = -1*Kval*MRPdiff
             term2 = -1*P @ wdiff
 
             # term3a = (w_des_dot - skew_sym(w_meas_i) @ w_des_inertial)
@@ -554,29 +553,13 @@ while not exc.isTerminated():
     # ekf_prop.inputs.ang_vel_meas_body_inertial(CartesianVector3([w_meas[0], w_meas[1], w_meas[2]]))
     its += 1
 
-## Plotting
+## Save data to csv files to plot in analyze.py
 
 mrper = pd.DataFrame(data={"time": time_vec, "MRP0": MRPerrorhistory0, "MRP1": MRPerrorhistory1, "MRP2": MRPerrorhistory2})
 mrper.to_csv("results/MRPerror.csv",sep=',',index=False)
 
+cmdhist = pd.DataFrame(data={"time": time_vec, "cmd0": commandhistory0, "cmd1": commandhistory1, "cmd2": commandhistory2})
+cmdhist.to_csv("results/commandhistory.csv",sep=',',index=False)
 
-# f2 = plt.figure(2)
-# plt.subplot(3,1,1)
-# plt.plot(time_vec,commandhistory0)
-# plt.subplot(3,1,2)
-# plt.plot(time_vec,commandhistory1)
-# plt.subplot(3,1,3)
-# plt.plot(time_vec,commandhistory2)
-# plt.title("Torque command history")
-
-f3 = plt.figure(3)
-plt.subplot(3,1,1)
-plt.plot(time_vec,wmeashistory0)
-plt.subplot(3,1,2)
-plt.plot(time_vec,wmeashistory1)
-plt.subplot(3,1,3)
-plt.plot(time_vec,wmeashistory2)
-plt.title("Measured angular velocity (body frame) history")
-
-
-plt.show()
+gyrohist = pd.DataFrame(data={"time": time_vec, "gyro0": wmeashistory0, "gyro1": wmeashistory1, "gyro2": wmeashistory2})
+gyrohist.to_csv("results/gyrohistory.csv",sep=',',index=False)
