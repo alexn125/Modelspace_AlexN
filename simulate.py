@@ -14,6 +14,7 @@ from modelspace.OrbitalElementsStateInit import OrbitalElementsStateInit
 ## Sensor imports
 from modelspace.StarTracker import StarTracker
 from modelspace.IMU import IMU
+from modelspace.Gyro import Gyro
 from modelspace.BiasNoiseModel import BiasNoiseModel
 # from modelspace.Magnetometer import Magnetometer
 ## Navigation imports
@@ -186,9 +187,20 @@ st.params.mount_frame(sc.body())
 st.params.reference_frame(earth.outputs.inertial_frame())
 
 ## IMU
-imu = IMU(exc, START_STEP, "imu")
+# imu = IMU(exc, START_STEP, "imu")
+# imu.params.mount_frame(sc.body())
+# imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
+# imu.params.mount_position__mf(CartesianVector3([0.0,0.0,0.0]))
+# imu.params.mount_alignment_mf(Quaternion([1.0,0.0,0.0,0.0]))
+# imu.params.rate_hz(int(sim_rate))
+
+## Gyro
+imu = Gyro(exc,START_STEP, "imu")
 imu.params.mount_frame(sc.body())
-imu.params.gyro_bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
+imu.params.bias(CartesianVector3([-1*(1/3600)*DEGREES_TO_RADIANS, 2*(1/3600)*DEGREES_TO_RADIANS, -3*(1/3600)*DEGREES_TO_RADIANS]))
+imu.params.mount_position__mf(CartesianVector3([0.0,0.0,0.0]))
+imu.params.mount_alignment_mf(Quaternion([1.0,0.0,0.0,0.0]))
+imu.params.rate_hz(int(sim_rate))
 
 ## Sun Sensor
 sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
@@ -312,8 +324,9 @@ rw2.params.wheel_location__body(CartesianVector3([0.0,0.0,0.05]))
 truth = CsvLogger(exc, "truth.csv")
 truth.addParameter(exc.time().base_time,"sim_time")
 truth.addParameter(sc.outputs.quat_sc_pci,"quat_true")
-truth.addParameter(sc.outputs.ang_vel_sc_pci__body,"angvel_true")
-truth.addParameter(imu.params.gyro_bias,"gyro_bias_true")
+# truth.addParameter(sc.outputs.ang_vel_sc_pci__body,"angvel_true")
+# truth.addParameter(imu.params.gyro_bias,"gyro_bias_true")
+truth.addParameter(imu.params.bias,"gyro_bias_true")
 exc.logManager().addLog(truth,Time(1))
 
 ## Save nav outputs
@@ -433,11 +446,16 @@ wmeashistory0 = []
 wmeashistory1 = []
 wmeashistory2 = []
 
+whistory0 = []
+whistory1 = []
+whistory2 = []
+
 time_vec = []
  
 MRPdiff = np.array([0.0,0.0,0.0])
 u = np.array([0.0,0.0,0.0])
 w_meas = np.array([0.0,0.0,0.0])
+w = np.array([0.0,0.0,0.0])
 
 while not exc.isTerminated():
     MRPerrorhistory0.append(MRPdiff[0])
@@ -449,6 +467,12 @@ while not exc.isTerminated():
     wmeashistory0.append(w_meas[0])
     wmeashistory1.append(w_meas[1])
     wmeashistory2.append(w_meas[2])
+    whistory0.append(w[0])
+    whistory1.append(w[1])
+    whistory2.append(w[2])
+
+
+
     time_vec.append(float(its))
 
     exc.step()
@@ -506,7 +530,6 @@ while not exc.isTerminated():
                 MRPdiff = shadowset(MRPdiff)
                 
             # wdiff = w_meas - w_des
-            print(w_meas)
             wdiff = w_meas - w_des_inertial
 
             # desired angular acceleration
@@ -516,30 +539,38 @@ while not exc.isTerminated():
             term1 = -1*Kval*MRPdiff
             term2 = -1*P @ wdiff
 
-            # term3a = (w_des_dot - skew_sym(w_meas_i) @ w_des_inertial)
-            # term3c = J @ term3a
-
-            # term3b = J @ w_meas_i
-            # term3d = skew_sym(w_des_inertial) @ term3b
-
-            term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
+            term3a = (w_des_dot - skew_sym(w_meas) @ w_des_inertial)
             term3c = J @ term3a
-            
+
             term3b = J @ w_meas
-            term3d = skew_sym(w_des) @ term3b   
+            term3d = skew_sym(w_des_inertial) @ term3b
+
+            # term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
+            # term3c = J @ term3a
+            
+            # term3b = J @ w_meas
+            # term3d = skew_sym(w_des) @ term3b   
 
             term3 = term3c + term3d
            
             u = term1 + term2 + term3
 
+            wii = sc.outputs.ang_vel_sc_pci__body()
+            w = np.array([wii.get(0), wii.get(1), wii.get(2)])
+            # w = DCMt @ wii
+
             # print(u)
             # print('-------------')
-            rw0.inputs.torque_com(-1*u[0])
-            rw1.inputs.torque_com(-1*u[1])
-            rw2.inputs.torque_com(-1*u[2])
-            # rw0.inputs.torque_com(0.0)
-            # rw1.inputs.torque_com(0.0)
-            # rw2.inputs.torque_com(0.0)
+            # rw0.inputs.torque_com(-1*u[0])
+            # rw1.inputs.torque_com(-1*u[1])
+            # rw2.inputs.torque_com(-1*u[2])
+            rw0.inputs.torque_com(0.0)
+            rw1.inputs.torque_com(0.0)
+            rw2.inputs.torque_com(0.0)
+
+
+
+            print(np.linalg.norm(w_meas))
 
             gps_pos_km1 = gps_pos_k
     if first_step:
@@ -563,3 +594,6 @@ cmdhist.to_csv("results/commandhistory.csv",sep=',',index=False)
 
 gyrohist = pd.DataFrame(data={"time": time_vec, "gyro0": wmeashistory0, "gyro1": wmeashistory1, "gyro2": wmeashistory2})
 gyrohist.to_csv("results/gyrohistory.csv",sep=',',index=False)
+
+whist = pd.DataFrame(data={"time": time_vec, "w0": whistory0, "w1": whistory1, "w2": whistory2})
+whist.to_csv("results/whistory.csv",sep=',',index=False)
