@@ -1,18 +1,18 @@
-"""
-Alex Newett - Modelspace GNC Research 2025
-
-"""
 ## Important stuff
 import sys, math, os
 import numpy as np
 import pandas as pad
+import IPython
 ## Basic imports
 from modelspace.Spacecraft import Spacecraft
+from modelspace.CustomPlanet import CustomPlanet
 from modelspace.SpicePlanet import SpicePlanet
 from modelspace.OrbitalElementsStateInit import OrbitalElementsStateInit
 ## Sensor imports
 from modelspace.StarTracker import StarTracker
+from modelspace.IMU import IMU
 from modelspace.Gyro import Gyro
+from modelspace.BiasNoiseModel import BiasNoiseModel
 # from modelspace.Magnetometer import Magnetometer
 ## Navigation imports
 from modelspace.AttitudeEkfTimeUpdate import AttitudeEkfTimeUpdate
@@ -20,35 +20,36 @@ from modelspace.AttitudeEkfMeasUpdate import AttitudeEkfMeasUpdate
 from modelspace.SimpleDiscreteProcessNoise import SimpleDiscreteProcessNoise
 ## Guidance imports
 from modelspace.TriadGuidance import TriadGuidance
+from modelspace.ReactionWheelModel import ReactionWheelModel
 ## Control imports
 from modelspace.PidAttitudeControl import PidAttitudeControl
 ## numpy matrix math custom functions
 from transforms import skew_sym, shadowset, MRPsubtract, quat2MRP
+import matplotlib.pyplot as plt
 
 ## MODELSPACE.PY IMPORTS --------------------------------------------------------------------------------------------------------------------------------------------------
 # Base simulation stuff
-from modelspace.ModelSpacePy import SimulationExecutive, connectSignals, Time, CsvLogger, Node, START_STEP, END_STEP
+from modelspace.ModelSpacePy import SimulationExecutive, connectSignals, Time, CsvLogger, Node, START_STEP, END_STEP, NOT_SCHEDULED
 # Unit conversions
-from modelspace.ModelSpacePy import DEGREES_TO_RADIANS
+from modelspace.ModelSpacePy import DEGREES_TO_RADIANS, RADIANS_TO_DEGREES
 # Vectors, matrices, attitude
-from modelspace.ModelSpacePy import CartesianVector3, Matrix6, Matrix63, Matrix3, MRP, Quaternion
+from modelspace.ModelSpacePy import CartesianVector3, CartesianVector4, Matrix6, Matrix63, Matrix3, MRP, Quaternion, Euler321, DCM
+# Data IO
+from modelspace.ModelSpacePy import DataIOBase, DataIOMatrix3DPtr
 # Visuals
 from modelspaceutils.vizkit.VizKitPlanetRelative import VizKitPlanetRelative
+# Planet relative states model
+# from modelspace.PlanetRelativeStatesModel import PlanetRelativeStatesModel
 # Frame state sensor model
 from modelspace.FrameStateSensorModel import FrameStateSensorModel
 ## Clear terminal
 os.system('cls' if os.name == 'nt' else 'clear')
-
-# REACTION_WHEELS = [(Euler321([0.0, 0.0, 0.0]).toDCM()).toQuaternion(),
-#                     (Euler321([0.0, 90.0*DEGREES_TO_RADIANS, 0.0]).toDCM()).toQuaternion(),
-#                     (Euler321([0.0, 0.0, 90.0*DEGREES_TO_RADIANS]).toDCM()).toQuaternion()]
 
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
 
 sim_rate = 1 # Hz
 sim_length = 3600 # seconds
 
-commands = np.genfromtxt('commands.csv',delimiter=',')
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
@@ -59,8 +60,6 @@ exc.end(sim_length)
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
 sun = SpicePlanet(exc, "sun")
-
-"-------------------------------------------------------------------------------------------------------------------------------"
 
 "Read TLE/Initialize Spacecraft ------------------------------------------------------------------------------------------------"
 ## Create object to initialize position and velocity
@@ -101,10 +100,12 @@ with open('INIT_TLE.txt','r') as f:
 
     f.close() 
 
+# print(earth.outputs.mu())
 ## Calculate remaining elements
 semimajoraxis = (earth.outputs.mu()/(meanmot*meanmot))**(1/3)
+# print("Semimajor Axis (m):", semimajoraxis)
 period = 2*math.pi*math.sqrt((semimajoraxis**3)/earth.outputs.mu())
-
+# print("Orbital Period (s):", period)
 ## Newton-Raphson to calculate eccentric anomaly
 max_iterations = 100
 tolerance = 1e-14
@@ -115,6 +116,8 @@ while its<max_iterations:
     if abs(E) < tolerance:
         EccAnom = Eg 
         trueAnom = 2*math.atan(math.sqrt((1+ecc)/(1-ecc))*math.tan(EccAnom/2)) # True anomaly from eccentric anomaly
+        # print(math.atan(math.sqrt((1+ecc)/(1-ecc))))
+        # print(math.tan(EccAnom/2))
         break
     else:
         bottom = (ecc*math.cos(Eg)) - 1
@@ -124,8 +127,11 @@ while its<max_iterations:
         if its == max_iterations:
             raise RuntimeError
 
+
+
 ## Spacecraft Object
 sc = Spacecraft(exc,"sc")
+# sc.configureFromDefault("6U")
 
 Ixx = 0.026
 Iyy = 0.06
@@ -137,7 +143,7 @@ sc.params.inertia(Matrix3([[Ixx, 0.0, 0.0],
                    [0.0, 0.0, Izz]]))
 
 ## Initial Truth Attitude and Angular Velocity
-init_attitude_truth = MRP([0.0, 0.1, 0.0])
+init_attitude_truth = MRP([0.2, 0.2, 0.2])
 init_angvel_truth = CartesianVector3([-0.2*DEGREES_TO_RADIANS, 0.2*DEGREES_TO_RADIANS, 0.2*DEGREES_TO_RADIANS])
 
 ## Assign initial state parameters
@@ -158,9 +164,18 @@ orbels_init.params.RAAN(DEGREES_TO_RADIANS*raan)
 orbels_init.params.w(DEGREES_TO_RADIANS*argofp)
 orbels_init.params.f(trueAnom)
 
-"-------------------------------------------------------------------------------------------------------------------------------"
+## Sun Sensor
+sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
+sun_sens.params.target_frame_ptr(sc.body())
+sun_sens.params.reference_frame_ptr(sun.outputs.inertial_frame())
+sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
 
-"Sensor Setup ------------------------------------------------------------------------------------------------------------------"
+## GPS/Earth Sensor
+erf_sens = FrameStateSensorModel(exc, START_STEP, "erf_sens")
+erf_sens.params.target_frame_ptr(sc.body())
+erf_sens.params.reference_frame_ptr(earth.outputs.inertial_frame())
+erf_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
+
 ## Star Tracker
 st = StarTracker(exc, START_STEP, "st")
 st.configureFromDefault("Arcsec_Sagitta")
@@ -175,21 +190,6 @@ imu.params.mount_position__mf(CartesianVector3([0.0,0.0,0.0]))
 imu.params.mount_alignment_mf(Quaternion([1.0,0.0,0.0,0.0]))
 imu.params.rate_hz(int(sim_rate))
 
-## Sun Sensor
-sun_sens = FrameStateSensorModel(exc, START_STEP, "sun_sens")
-sun_sens.params.target_frame_ptr(sc.body())
-sun_sens.params.reference_frame_ptr(sun.outputs.inertial_frame())
-sun_sens.params.output_frame_ptr(earth.outputs.inertial_frame())                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              
-
-## GPS/Earth Sensor
-erf_sens = FrameStateSensorModel(exc, START_STEP, "erf_sens")
-erf_sens.params.target_frame_ptr(sc.body())
-erf_sens.params.reference_frame_ptr(earth.outputs.inertial_frame())
-erf_sens.params.output_frame_ptr(earth.outputs.inertial_frame())
-
-"-------------------------------------------------------------------------------------------------------------------------------"
-
-"Navigation --------------------------------------------------------------------------------------------------------------------"
 ## Attitude EKF Time Update (Propagation)
 ekf_prop = AttitudeEkfTimeUpdate(exc, START_STEP, "ekf_prop")
 connectSignals(ekf_prop.outputs.time_state, ekf_prop.inputs.time_prev)
@@ -205,7 +205,7 @@ process_noise.inputs.time_update(Time(1))
 connectSignals(ekf_prop.outputs.cov_update, process_noise.inputs.cov_pre_snc)
 
 ## Attitude EKF Measurement Update
-ekf_meas = AttitudeEkfMeasUpdate(exc, START_STEP, "ekf_meas")
+ekf_meas = AttitudeEkfMeasUpdate(exc, END_STEP, "ekf_meas")
 ekf_meas.params.att_residual_filter(4)
 ekf_meas.params.meas_covariance(Matrix3([[3e-5, 0, 0], [0, 3e-5, 0], [0, 0, 3e-5]]))
 
@@ -221,99 +221,35 @@ connectSignals(ekf_meas.outputs.bias_plus, ekf_prop.inputs.gyro_bias)
 connectSignals(ekf_meas.outputs.cov_plus, ekf_prop.inputs.cov_prev)
 connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_inertial)
 
-"-------------------------------------------------------------------------------------------------------------------------------"
-
-"Guidance ----------------------------------------------------------------------------------------------------------------------"
 ## Triad Guidance setup
 triad = TriadGuidance(exc, START_STEP, "triad")
 triad.inputs.current_primary_body(CartesianVector3([1.0, 0.0, 0.0]))
 triad.inputs.current_secondary_body(CartesianVector3([0.0, 1.0, 0.0]))
 connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
 
-"-------------------------------------------------------------------------------------------------------------------------------"
-
-"Control -----------------------------------------------------------------------------------------------------------------------"
 ## Control setup
 pd = PidAttitudeControl(exc, START_STEP, "PD")
-pd.params.P(-0.0007)
-pd.params.K(-0.004)
+pd.params.P(-0.001)
+pd.params.K(-0.003)
 
-## Connecting signals
 connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
 connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
 connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
 
 connectSignals(pd.outputs.control_cmd,scnode.moment)
 
-"-------------------------------------------------------------------------------------------------------------------------------"
-
-"Logging -----------------------------------------------------------------------------------------------------------------------"
 ## Save truth data
 truth = CsvLogger(exc, "truth.csv")
 truth.addParameter(exc.time().base_time,"sim_time")
 truth.addParameter(sc.outputs.quat_sc_pci,"quat_true")
 truth.addParameter(sc.outputs.ang_vel_sc_pci__body,"angvel_true")
+# truth.addParameter(imu.params.gyro_bias,"gyro_bias_true")
 truth.addParameter(imu.params.bias,"gyro_bias_true")
 exc.logManager().addLog(truth,Time(1))
 
-## Save nav outputs
-navout = CsvLogger(exc, "nav_log.csv")
-navout.addParameter(exc.time().base_time, "time")                     
-navout.addParameter(ekf_prop.outputs.mrp_update_body_inertial,"mrp_minus")     
-navout.addParameter(ekf_prop.outputs.gyro_bias,"bias_minus")     
-navout.addParameter(ekf_prop.outputs.cov_update,"cov_minus")   
-navout.addParameter(ekf_meas.outputs.att_plus_mrp_body_inertial,"mrp_plus")     
-navout.addParameter(ekf_meas.outputs.bias_plus,"bias_plus")     
-navout.addParameter(ekf_meas.outputs.cov_plus,"cov_plus")   
-navout.addParameter(ekf_meas.outputs.meas_processed,"meas_processed")   
-navout.addParameter(ekf_meas.outputs.meas_pre_residual,"pre_update_residual")   
-exc.logManager().addLog(navout, Time(1))
-
-guidout = CsvLogger(exc, "guid_log.csv")
-guidout.addParameter(exc.time().base_time, "time")
-guidout.addParameter(triad.outputs.quat_body_ref,"quat_body_ref")     
-guidout.addParameter(triad.inputs.desired_secondary, "sun_pnt")
-exc.logManager().addLog(guidout, Time(1))
-
-contout = CsvLogger(exc, "control_log.csv")
-contout.addParameter(exc.time().base_time, "time")
-contout.addParameter(pd.outputs.control_cmd, "torque commands")
-contout.addParameter(pd.outputs.error_quat, "error_quat")
-exc.logManager().addLog(contout, Time(1))
-
-sensors = CsvLogger(exc, "sensors.csv")
-sensors.addParameter(exc.time().base_time, "time")
-sensors.addParameter(erf_sens.outputs.pos_tgt_ref__out, "earth_sen")
-sensors.addParameter(sun_sens.outputs.pos_tgt_ref__out, "sun_sen")
-sensors.addParameter(imu.outputs.meas_ang_vel_sf, "gyro_sen")
-sensors.addParameter(st.outputs.meas_quat_sf_ref, "st_sen")
-exc.logManager().addLog(sensors, Time(1))
-
-"-------------------------------------------------------------------------------------------------------------------------------"
-
-"Visuals -----------------------------------------------------------------------------------------------------------------------"
-# # Visuals (if on)
-
-# vk_planet_rel = VizKitPlanetRelative(exc)
-# connectSignals(earth.outputs.inertial_frame, vk_planet_rel.planet)
-# connectSignals(sc.outputs.body, vk_planet_rel.target)
-
-# vk_planet_rel_rate = Time()
-# vk_planet_rel_rate.fromDouble(1.0)
-# exc.logManager().addLog(vk_planet_rel, vk_planet_rel_rate)
-
-# vk = VizKitPlanetRelative(exc)
-# vk.target(sc.outputs.body())
-# vk.planet(earth.outputs.inertial_frame())
-# exc.logManager().addLog(vk, Time(100))
-
-# "-------------------------------------------------------------------------------------------------------------------------------"
-
-"Simulation Loop ---------------------------------------------------------------------------------------------------------------"
-## Startup (initializes exc and models)
 exc.startup()
 
-## Navigation initialization
+# Navigation initialization
 att_est_init = MRP()
 att_est_init.set(0,0.1)
 att_est_init.set(1,0.3)
@@ -333,10 +269,6 @@ COV_initial.set(4, 4, 0.1)
 COV_initial.set(5, 5, 0.1)
 ekf_prop.inputs.cov_prev(COV_initial)
 
-## Run simulation
-
-triad.inputs.desired_secondary(CartesianVector3([0.0, 1.0, 0.0]))
-
 first_step = True
 second_step = False
 GNCstart = False
@@ -346,24 +278,27 @@ initpos = np.array([initpos_w.get(0),initpos_w.get(1),initpos_w.get(2)])
 
 while not exc.isTerminated():
 
+    # rw0.inputs.torque_com(-1*uv0)
+    # rw1.inputs.torque_com(-1*uv1)
+    # rw2.inputs.torque_com(-1*uv2)
+    # IPython.embed()
     if first_step or second_step:
-        triad.inputs.desired_secondary(CartesianVector3([0.0,1.0,0.0])) #before gnc starts, set triad to placeholder vector
+        triad.inputs.desired_secondary(CartesianVector3([-1,-1,-1]))
         
     elif GNCstart:
         sunout = sun_sens.outputs.pos_tgt_ref__out()
         triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
-
+        # gps_pos_km1 = gps_pos_k
         # Preallocation time
         vel_est = np.zeros([3,1])
-
         # Rough estimate of velocity from GPS position measurements (finite difference)
+        # gps_pos_k = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
         vel_est = (gps_pos_k - gps_pos_km1)/(1/sim_rate)
-
+        # print(exc.simTime(),vel_est)
         # estimated angular momentum unit vector of orbit
         rnorm = gps_pos_k/np.linalg.norm(gps_pos_k)
         velnorm = vel_est/np.linalg.norm(vel_est)
         hhat = np.cross(rnorm, velnorm)
-
         # estimated desired angular velocity of orbit (assuming circular orbit, in the inertial frame)
         mag = (2*math.pi)/period
         w_des_inertial = mag*hhat
@@ -389,5 +324,15 @@ while not exc.isTerminated():
         second_step = True   
 
     if not first_step and not second_step:
+        # gps_pos_km1 = gps_pos_k
         gps_pos_k = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
         GNCstart = True
+    # IPython.embed()
+
+    # uvec = pd.outputs.control_cmd()
+    # uv0 = uvec.get(0)
+    # uv1 = uvec.get(1)
+    # uv2 = uvec.get(2)
+
+    # att = sc.outputs.quat_sc_pci()
+    
