@@ -5,7 +5,7 @@ Alex Newett - Modelspace GNC Research 2025
 ## Important stuff
 import sys, math, os
 import numpy as np
-import pandas as pd
+import pandas as pad
 ## Basic imports
 from modelspace.Spacecraft import Spacecraft
 from modelspace.CustomPlanet import CustomPlanet
@@ -57,6 +57,7 @@ os.system('cls' if os.name == 'nt' else 'clear')
 sim_rate = 1 # Hz
 sim_length = 3600 # seconds
 
+commands = np.genfromtxt('commands.csv',delimiter=',')
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
@@ -273,8 +274,8 @@ connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
 "Control -----------------------------------------------------------------------------------------------------------------------"
 ## Control setup
 # pd = PidAttitudeControl(exc, END_STEP, "PD")
-# pd.params.P(-1/100000)
-# pd.params.K(-1/20)
+# pd.params.P(-0.0001)
+# pd.params.K(-0.0003)
 
 ## Reaction wheel orientations (body frame)
 # REACTION_WHEELS = [Quaternion([math.cos(math.pi/4),0,math.sin(math.pi/4),0]),
@@ -311,11 +312,10 @@ rw2.params.wheel_location__body(CartesianVector3([0.0,0.0,0.05]))
 
 ## Connecting signals
 # connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
-# pd.inputs.cmd_state(Quaternion([1,0,0,0]))
+# # pd.inputs.cmd_state(Quaternion([1,0,0,0]))
 # connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
 # connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
 # w_des = CartesianVector3([0.0,0.0,0.0]) # desired angular velocity
-# pd.inputs.cmd_ang_vel(w_des)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
@@ -392,6 +392,12 @@ exc.logManager().addLog(sensors, Time(1))
 ## Startup (initializes exc and models)
 exc.startup()
 
+initpos = sc.params.initial_position()
+print("initpos =",initpos.get(0),initpos.get(1),initpos.get(2))
+initvel = sc.params.initial_velocity()
+print("initvel=",initvel.get(0),initvel.get(1),initvel.get(2))
+
+
 ## Navigation initialization
 att_est_init = MRP()
 att_est_init.set(0,0.1)
@@ -446,16 +452,42 @@ wmeashistory0 = []
 wmeashistory1 = []
 wmeashistory2 = []
 
+wdeshistory0 = []
+wdeshistory1 = []
+wdeshistory2 = []
+
 whistory0 = []
 whistory1 = []
 whistory2 = []
 
+t1_0 = []
+t1_1 = []
+t1_2 = []
+
+t2_0 = []
+t2_1 = []
+t2_2 = []
+
+t3_0 = []
+t3_1 = []
+t3_2 = []
+
+wtnorm = []
+wmnorm = []
+
 time_vec = []
- 
+tgo = 0.0
+
 MRPdiff = np.array([0.0,0.0,0.0])
 u = np.array([0.0,0.0,0.0])
 w_meas = np.array([0.0,0.0,0.0])
 w = np.array([0.0,0.0,0.0])
+term1 = np.array([0.0,0.0,0.0])
+term2 = np.array([0.0,0.0,0.0])
+term3 = np.array([0.0,0.0,0.0])
+w_des = np.array([0.0,0.0,0.0])
+wtn = 0.0
+wmn = 0.0
 
 while not exc.isTerminated():
     MRPerrorhistory0.append(MRPdiff[0])
@@ -464,16 +496,34 @@ while not exc.isTerminated():
     commandhistory0.append(-1*u[0])
     commandhistory1.append(-1*u[1])
     commandhistory2.append(-1*u[2])
+
+    t1_0.append(term1[0])
+    t1_1.append(term1[1])
+    t1_2.append(term1[2])
+
+    t2_0.append(term2[0])
+    t2_1.append(term2[1])
+    t2_2.append(term2[2])
+
+    t3_0.append(term3[0])
+    t3_1.append(term3[1])
+    t3_2.append(term3[2])
+    
     wmeashistory0.append(w_meas[0])
     wmeashistory1.append(w_meas[1])
     wmeashistory2.append(w_meas[2])
+    wmnorm.append(wmn)
+
     whistory0.append(w[0])
     whistory1.append(w[1])
     whistory2.append(w[2])
+    wtnorm.append(wtn)
 
+    wdeshistory0.append(w_des[0])
+    wdeshistory1.append(w_des[1])
+    wdeshistory2.append(w_des[2])
 
-
-    time_vec.append(float(its))
+    time_vec.append(float(tgo))
 
     exc.step()
 
@@ -497,15 +547,19 @@ while not exc.isTerminated():
             # estimated desired angular velocity of orbit (assuming circular orbit, in the inertial frame)
             mag = (2*math.pi)/period
             w_des_inertial = mag*hhat
-            est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM().transpose() # DCM from inertial to body
-            DCMt = np.array([[est_att.get(0,0), est_att.get(0,1), est_att.get(0,2)],
+            est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM() # DCM from inertial to body
+            DCMn = np.array([[est_att.get(0,0), est_att.get(0,1), est_att.get(0,2)],
                             [est_att.get(1,0), est_att.get(1,1), est_att.get(1,2)],
                             [est_att.get(2,0), est_att.get(2,1), est_att.get(2,2)]])
+            DCMt = np.transpose(DCMn)
             w_des = DCMt @ w_des_inertial # desired angular velocity in body frame
+            
+            # pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
             
             # current angular velocity measurement
             angvel = imu.outputs.meas_ang_vel_sf()
             w_meas = np.array([angvel.get(0), angvel.get(1), angvel.get(2)])
+            wmn = np.linalg.norm(w_meas)
             # w_meas = DCMt @ w_meas_i # measured angular velocity in body frame
 
             # relative MRP attitude, i.e. the difference between current estimated and desired attitude
@@ -539,40 +593,42 @@ while not exc.isTerminated():
             term1 = -1*Kval*MRPdiff
             term2 = -1*P @ wdiff
 
-            term3a = (w_des_dot - skew_sym(w_meas) @ w_des_inertial)
+            term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
             term3c = J @ term3a
 
             term3b = J @ w_meas
-            term3d = skew_sym(w_des_inertial) @ term3b
-
-            # term3a = (w_des_dot - skew_sym(w_meas) @ w_des)
-            # term3c = J @ term3a
-            
-            # term3b = J @ w_meas
-            # term3d = skew_sym(w_des) @ term3b   
+            term3d = skew_sym(w_des) @ term3b
 
             term3 = term3c + term3d
            
-            u = term1 + term2 + term3
+            # uv = pd.outputs.control_cmd()
+            # u = np.array([uv.get(0),uv.get(1),uv.get(2)])
 
+            u = (term1 + term2 + term3)
+            
             wii = sc.outputs.ang_vel_sc_pci__body()
-            w = np.array([wii.get(0), wii.get(1), wii.get(2)])
-            # w = DCMt @ wii
-
+            wi = np.array([wii.get(0), wii.get(1), wii.get(2)])
+            att = sc.outputs.quat_sc_pci().toDCM() # DCM from inertial to body
+            DCMa = np.array([[att.get(0,0), att.get(0,1), att.get(0,2)],
+                            [att.get(1,0), att.get(1,1), att.get(1,2)],
+                            [att.get(2,0), att.get(2,1), att.get(2,2)]])
+            w = DCMa @ wi    
+            wtn = np.linalg.norm(w)
+            
             # print(u)
             # print('-------------')
-            # rw0.inputs.torque_com(-1*u[0])
-            # rw1.inputs.torque_com(-1*u[1])
-            # rw2.inputs.torque_com(-1*u[2])
-            rw0.inputs.torque_com(0.0)
-            rw1.inputs.torque_com(0.0)
-            rw2.inputs.torque_com(0.0)
-
-
-
-            print(np.linalg.norm(w_meas))
+            rw0.inputs.torque_com(-1*u[0])
+            rw1.inputs.torque_com(-1*u[1])
+            rw2.inputs.torque_com(-1*u[2])
+            # rw0.inputs.torque_com(0.0)
+            # rw1.inputs.torque_com(0.0)
+            # rw2.inputs.torque_com(0.0)
+            # rw0.inputs.torque_com(-1*commands[1][its])
+            # rw1.inputs.torque_com(-1*commands[2][its])
+            # rw2.inputs.torque_com(-1*commands[0][its])
 
             gps_pos_km1 = gps_pos_k
+            
     if first_step:
         first_step = False
         gps_pos_km1 = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])       
@@ -582,18 +638,25 @@ while not exc.isTerminated():
     sunout = sun_sens.outputs.pos_tgt_ref__out()
     triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
     # ekf_prop.inputs.ang_vel_meas_body_inertial(CartesianVector3([w_meas[0], w_meas[1], w_meas[2]]))
+    tgo += (1/sim_rate)
     its += 1
 
 ## Save data to csv files to plot in analyze.py
 
-mrper = pd.DataFrame(data={"time": time_vec, "MRP0": MRPerrorhistory0, "MRP1": MRPerrorhistory1, "MRP2": MRPerrorhistory2})
+mrper = pad.DataFrame(data={"time": time_vec, "MRP0": MRPerrorhistory0, "MRP1": MRPerrorhistory1, "MRP2": MRPerrorhistory2})
 mrper.to_csv("results/MRPerror.csv",sep=',',index=False)
 
-cmdhist = pd.DataFrame(data={"time": time_vec, "cmd0": commandhistory0, "cmd1": commandhistory1, "cmd2": commandhistory2})
+cmdhist = pad.DataFrame(data={"time": time_vec, "cmd0": commandhistory0, "cmd1": commandhistory1, "cmd2": commandhistory2})
 cmdhist.to_csv("results/commandhistory.csv",sep=',',index=False)
 
-gyrohist = pd.DataFrame(data={"time": time_vec, "gyro0": wmeashistory0, "gyro1": wmeashistory1, "gyro2": wmeashistory2})
+termshist = pad.DataFrame(data={"time": time_vec, "term1_0": t1_0, "term1_1": t1_1, "term1_2": t1_2, "term2_0": t2_0, "term2_1": t2_1, "term2_2": t2_2, "term3_0": t3_0, "term3_1": t3_1, "term3_2": t3_2})
+termshist.to_csv("results/termshistory.csv",sep=",",index=False)
+
+gyrohist = pad.DataFrame(data={"time": time_vec, "gyro0": wmeashistory0, "gyro1": wmeashistory1, "gyro2": wmeashistory2, "wmnorm": wmnorm})
 gyrohist.to_csv("results/gyrohistory.csv",sep=',',index=False)
 
-whist = pd.DataFrame(data={"time": time_vec, "w0": whistory0, "w1": whistory1, "w2": whistory2})
+whist = pad.DataFrame(data={"time": time_vec, "w0": whistory0, "w1": whistory1, "w2": whistory2, "wnorm": wtnorm, "wdes0": wdeshistory0, "wdes1": wdeshistory1, "wdes2": wdeshistory2})
 whist.to_csv("results/whistory.csv",sep=',',index=False)
+
+# print(commandhistory0[10],commandhistory1[10],commandhistory2[10])
+print(MRPerrorhistory0[10],MRPerrorhistory1[10],MRPerrorhistory2[10])
