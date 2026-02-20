@@ -346,15 +346,14 @@ initpos = np.array([initpos_w.get(0),initpos_w.get(1),initpos_w.get(2)])
 
 while not exc.isTerminated():
 
-    if first_step or second_step:
+    if first_step:
         triad.inputs.desired_secondary(CartesianVector3([0.0,1.0,0.0])) #before gnc starts, set triad to placeholder vector
-        
-    elif GNCstart:
+    elif second_step:
         sunout = sun_sens.outputs.pos_tgt_ref__out()
         triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
-
-        # Preallocation time
-        vel_est = np.zeros([3,1])
+    elif GNCstart: # runs GNC loop for every step now that gps measurements have populated
+        sunout = sun_sens.outputs.pos_tgt_ref__out()
+        triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
 
         # Rough estimate of velocity from GPS position measurements (finite difference)
         vel_est = (gps_pos_k - gps_pos_km1)/(1/sim_rate)
@@ -367,16 +366,18 @@ while not exc.isTerminated():
         # estimated desired angular velocity of orbit (assuming circular orbit, in the inertial frame)
         mag = (2*math.pi)/period
         w_des_inertial = mag*hhat
-        est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM() # DCM from inertial to body
+        est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM() # inertial = DCM * body
         DCMn = np.array([[est_att.get(0,0), est_att.get(0,1), est_att.get(0,2)],
                         [est_att.get(1,0), est_att.get(1,1), est_att.get(1,2)],
                         [est_att.get(2,0), est_att.get(2,1), est_att.get(2,2)]])
-        DCMt = np.transpose(DCMn)
+        DCMt = np.transpose(DCMn) # body = DCMtranspose * inertial
         w_des = DCMt @ w_des_inertial # desired angular velocity in body frame
         
         pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
 
-    exc.step()
+    exc.step() # <---------------- ACTUALLY STEPS THE SIMULATION!
+
+    # The following ifs are to generate two GPS measurements for the velocity measurement in control step
 
     if second_step:
         gps_pos_km1 = gps_pos_k
