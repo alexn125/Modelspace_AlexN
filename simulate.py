@@ -148,6 +148,7 @@ sc.params.initial_attitude(init_attitude_truth.toQuaternion())
 sc.params.initial_ang_vel(init_angvel_truth)
 sc.params.planet_ptr(earth)
 
+## Node to apply control torques to later
 scnode = Node("sc_node",sc.body())
 
 ## Initial truth position and velocity from Keplerian elements
@@ -205,7 +206,7 @@ process_noise.inputs.time_update(Time(1))
 connectSignals(ekf_prop.outputs.cov_update, process_noise.inputs.cov_pre_snc)
 
 ## Attitude EKF Measurement Update
-ekf_meas = AttitudeEkfMeasUpdate(exc, START_STEP, "ekf_meas")
+ekf_meas = AttitudeEkfMeasUpdate(exc, END_STEP, "ekf_meas")
 ekf_meas.params.att_residual_filter(4)
 ekf_meas.params.meas_covariance(Matrix3([[3e-5, 0, 0], [0, 3e-5, 0], [0, 0, 3e-5]]))
 
@@ -364,8 +365,9 @@ while not exc.isTerminated():
         hhat = np.cross(rnorm, velnorm)
 
         # estimated desired angular velocity of orbit (assuming circular orbit, in the inertial frame)
-        mag = (2*math.pi)/period
-        w_des_inertial = mag*hhat
+        # mag = (2*math.pi)/period
+        # w_des_inertial = mag*hhat
+        w_des_inertial = meanmot*hhat
         est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM() # inertial = DCM * body
         DCMn = np.array([[est_att.get(0,0), est_att.get(0,1), est_att.get(0,2)],
                         [est_att.get(1,0), est_att.get(1,1), est_att.get(1,2)],
