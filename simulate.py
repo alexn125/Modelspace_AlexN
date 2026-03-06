@@ -55,7 +55,7 @@ exc.setRateHz(sim_rate)
 exc.end(sim_length)
 # exc.end(100.0)
 
-navonly = True
+navonly = False
 
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
@@ -379,7 +379,7 @@ while not exc.isTerminated():
         DCMt = np.transpose(DCMn) # body = DCMtranspose * inertial
         w_des = DCMt @ w_des_inertial # desired angular velocity in body frame
         
-        # pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
+        pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
 
     exc.step() # <---------------- ACTUALLY STEPS THE SIMULATION!
 

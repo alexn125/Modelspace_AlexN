@@ -19,10 +19,10 @@ cont = pd.read_csv('results/control_log.csv')
 # pos = pd.read_csv('results/pos_log.csv')
 sen = pd.read_csv('results/sensors.csv')
 mrper = pd.read_csv('results/MRPerror.csv')
-cmdh = pd.read_csv('results/commandhistory.csv')
-gyroh = pd.read_csv('results/gyrohistory.csv')
-wh = pd.read_csv('results/whistory.csv')
-th = pd.read_csv('results/termshistory.csv')
+# cmdh = pd.read_csv('results/commandhistory.csv')
+# gyroh = pd.read_csv('results/gyrohistory.csv')
+# wh = pd.read_csv('results/whistory.csv')
+# th = pd.read_csv('results/termshistory.csv')
 
 ## Time vector
 sim_time = nav["time"]
@@ -86,7 +86,7 @@ Nav_cov_n_1 = [-1.0*val for val in Nav_cov_p_1]
 Nav_cov_p_2 = [3.0*math.sqrt(val) for val in nav['cov_plus_2_2']] # 3-sigma covariance
 Nav_cov_n_2 = [-1.0*val for val in Nav_cov_p_2]    
 
-navonly = True
+navonly = False
 
 xlabel = 'Time (s)'
 
