@@ -48,13 +48,14 @@ os.system('cls' if os.name == 'nt' else 'clear')
 sim_rate = 1 # Hz
 sim_length = 3600 # seconds
 
-commands = np.genfromtxt('commands.csv',delimiter=',')
 ## Simulation Executive
 exc = SimulationExecutive()
 exc.parseArgs(sys.argv)
 exc.setRateHz(sim_rate)
 exc.end(sim_length)
 # exc.end(100.0)
+
+navonly = True
 
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
@@ -224,6 +225,7 @@ connectSignals(imu.outputs.meas_ang_vel_sf,ekf_prop.inputs.ang_vel_meas_body_ine
 
 "-------------------------------------------------------------------------------------------------------------------------------"
 
+
 "Guidance ----------------------------------------------------------------------------------------------------------------------"
 ## Triad Guidance setup
 triad = TriadGuidance(exc, START_STEP, "triad")
@@ -232,21 +234,21 @@ triad.inputs.current_secondary_body(CartesianVector3([0.0, 1.0, 0.0]))
 connectSignals(erf_sens.outputs.pos_tgt_ref__out, triad.inputs.desired_primary)
 
 "-------------------------------------------------------------------------------------------------------------------------------"
+if not navonly:
+    "Control -----------------------------------------------------------------------------------------------------------------------"
+    ## Control setup
+    pd = PidAttitudeControl(exc, START_STEP, "PD")
+    pd.params.P(-0.0007)
+    pd.params.K(-0.004)
 
-"Control -----------------------------------------------------------------------------------------------------------------------"
-## Control setup
-pd = PidAttitudeControl(exc, START_STEP, "PD")
-pd.params.P(-0.0007)
-pd.params.K(-0.004)
+    ## Connecting signals
+    connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
+    connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
+    connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
 
-## Connecting signals
-connectSignals(triad.outputs.quat_body_ref, pd.inputs.cmd_state)
-connectSignals(st.outputs.meas_quat_sf_ref,pd.inputs.act_state)
-connectSignals(imu.outputs.meas_ang_vel_sf,pd.inputs.act_ang_vel)
+    connectSignals(pd.outputs.control_cmd,scnode.moment)
 
-connectSignals(pd.outputs.control_cmd,scnode.moment)
-
-"-------------------------------------------------------------------------------------------------------------------------------"
+    "-------------------------------------------------------------------------------------------------------------------------------"
 
 "Logging -----------------------------------------------------------------------------------------------------------------------"
 ## Save truth data
@@ -270,17 +272,19 @@ navout.addParameter(ekf_meas.outputs.meas_processed,"meas_processed")
 navout.addParameter(ekf_meas.outputs.meas_pre_residual,"pre_update_residual")   
 exc.logManager().addLog(navout, Time(1))
 
+
 guidout = CsvLogger(exc, "guid_log.csv")
 guidout.addParameter(exc.time().base_time, "time")
 guidout.addParameter(triad.outputs.quat_body_ref,"quat_body_ref")     
 guidout.addParameter(triad.inputs.desired_secondary, "sun_pnt")
 exc.logManager().addLog(guidout, Time(1))
 
-contout = CsvLogger(exc, "control_log.csv")
-contout.addParameter(exc.time().base_time, "time")
-contout.addParameter(pd.outputs.control_cmd, "torque commands")
-contout.addParameter(pd.outputs.error_quat, "error_quat")
-exc.logManager().addLog(contout, Time(1))
+if not navonly:
+    contout = CsvLogger(exc, "control_log.csv")
+    contout.addParameter(exc.time().base_time, "time")
+    contout.addParameter(pd.outputs.control_cmd, "torque commands")
+    contout.addParameter(pd.outputs.error_quat, "error_quat")
+    exc.logManager().addLog(contout, Time(1))
 
 sensors = CsvLogger(exc, "sensors.csv")
 sensors.addParameter(exc.time().base_time, "time")
@@ -375,7 +379,7 @@ while not exc.isTerminated():
         DCMt = np.transpose(DCMn) # body = DCMtranspose * inertial
         w_des = DCMt @ w_des_inertial # desired angular velocity in body frame
         
-        pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
+        # pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
 
     exc.step() # <---------------- ACTUALLY STEPS THE SIMULATION!
 

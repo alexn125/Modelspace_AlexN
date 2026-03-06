@@ -7,7 +7,7 @@ Alex Newett Simulation Analysis - Modelspace
 import pandas as pd
 import math
 from modelspaceutils.AutoDocPy import AutoDocPy
-from modelspaceutils.analysisutils import plotStateAndCovariance
+# from modelspaceutils.analysisutils import plotStateAndCovariance
 import matplotlib.pyplot as plt
 from modelspace.ModelSpacePy import Quaternion, MRP, RADIANS_TO_DEGREES
 from transforms import *
@@ -69,43 +69,128 @@ for i in range(len(truth["quat_true_0"])):
         mrp_truth_1[i] = -mrp_truth_1[i]/(norm**2)
         mrp_truth_2[i] = -mrp_truth_2[i]/(norm**2)
 
-    mrp_error_0.append(mrp_truth_0[i] - nav['mrp_minus_0'][i])
-    mrp_error_1.append(mrp_truth_1[i] - nav['mrp_minus_1'][i])
-    mrp_error_2.append(mrp_truth_2[i] - nav['mrp_minus_2'][i])
+    mrp_error = MRPsubtract(np.array([mrp_truth_0[i], mrp_truth_1[i],mrp_truth_2[i]]), np.array([nav['mrp_plus_0'][i], nav['mrp_plus_1'][i], nav['mrp_plus_2'][i]]))    
+
+
+    mrp_error_0.append(mrp_error[0])
+    mrp_error_1.append(mrp_error[1])
+    mrp_error_2.append(mrp_error[2])
 
 
 
 
-Nav_cov_p = [3.0*math.sqrt(val) for val in nav['cov_plus_0_0']] # 3-sigma covariance
-Nav_cov_n = [-1.0*val for val in Nav_cov_p]    
+Nav_cov_p_0 = [3.0*math.sqrt(val) for val in nav['cov_plus_0_0']] # 3-sigma covariance
+Nav_cov_n_0 = [-1.0*val for val in Nav_cov_p_0]    
+Nav_cov_p_1 = [3.0*math.sqrt(val) for val in nav['cov_plus_1_1']] # 3-sigma covariance
+Nav_cov_n_1 = [-1.0*val for val in Nav_cov_p_1]    
+Nav_cov_p_2 = [3.0*math.sqrt(val) for val in nav['cov_plus_2_2']] # 3-sigma covariance
+Nav_cov_n_2 = [-1.0*val for val in Nav_cov_p_2]    
 
-f1 = plt.figure(1)
-plt.subplot(3,1,1)
-plt.plot(sim_time,mrp_truth_0,sim_time,nav['mrp_minus_0'],sim_time,mrp_guid_0)
-plt.subplot(3,1,2)
-plt.plot(sim_time,mrp_truth_1,sim_time,nav['mrp_minus_1'],sim_time,mrp_guid_1)
-plt.subplot(3,1,3)
-plt.plot(sim_time,mrp_truth_2,sim_time,nav['mrp_minus_2'],sim_time,mrp_guid_2)
-plt.title('Truth vs. Estimate vs. Desired (MRP)')
-plt.plot()
+navonly = True
+
+xlabel = 'Time (s)'
+
+if not navonly:
+    f1 = plt.figure(1)
+    plt.subplot(3,1,1)
+    plt.title('Truth vs. Estimate vs. Desired (MRP)')
+    plt.plot(sim_time,mrp_truth_0,label='Truth')
+    plt.plot(sim_time,nav['mrp_plus_0'],label='Estimate')
+    plt.plot(sim_time,mrp_guid_0,label='Guidance')
+    plt.legend()
+    plt.ylabel('MRP_0')
+    plt.xlabel(xlabel)
+    plt.subplot(3,1,2)
+    plt.plot(sim_time,mrp_truth_1,label='Truth')
+    plt.plot(sim_time,nav['mrp_plus_1'],label='Estimate')
+    plt.plot(sim_time,mrp_guid_1,label='Guidance')
+    plt.legend()
+    plt.ylabel('MRP_1')
+    plt.xlabel(xlabel)
+    plt.subplot(3,1,3)
+    plt.plot(sim_time,mrp_truth_2,label='Truth')
+    plt.plot(sim_time,nav['mrp_plus_2'],label='Estimate')
+    plt.plot(sim_time,mrp_guid_2,label='Guidance')
+    plt.legend()
+    plt.ylabel('MRP_2')
+    plt.xlabel(xlabel)
+    plt.plot()
+else:
+    f1 = plt.figure(1)
+    plt.subplot(3,1,1)
+    plt.title('Truth vs. Estimate (MRP)')
+    plt.plot(sim_time,mrp_truth_0,label='Truth')
+    plt.plot(sim_time,nav['mrp_plus_0'],label='Estimate')
+    plt.legend()
+    plt.ylabel('MRP_0')
+    plt.xlabel(xlabel)
+    plt.subplot(3,1,2)
+    plt.plot(sim_time,mrp_truth_1,label='Truth')
+    plt.plot(sim_time,nav['mrp_plus_1'],label='Estimate')
+    plt.legend()
+    plt.ylabel('MRP_1')
+    plt.xlabel(xlabel)
+    plt.subplot(3,1,3)
+    plt.plot(sim_time,mrp_truth_2,label='Truth')
+    plt.plot(sim_time,nav['mrp_plus_2'],label='Estimate')
+    plt.legend()
+    plt.ylabel('MRP_2')
+    plt.xlabel(xlabel)
+    plt.plot()
+
 
 f2 = plt.figure(2)
 plt.subplot(3,1,1)
+plt.title("Gyro-measured Angular Velocity (deg/s)")
 plt.plot(sim_time,sen['gyro_sen_0']*RADIANS_TO_DEGREES)
+plt.xlabel(xlabel)
 plt.subplot(3,1,2)
 plt.plot(sim_time,sen['gyro_sen_1']*RADIANS_TO_DEGREES)
+plt.xlabel(xlabel)
 plt.subplot(3,1,3)
 plt.plot(sim_time,sen['gyro_sen_2']*RADIANS_TO_DEGREES)
-plt.title("Gyro-measured Angular Velocity (deg/s)")
+plt.xlabel(xlabel)
 
 f3 = plt.figure(3)
 plt.subplot(3,1,1)
+plt.title('Torque Commands from PD Control Law (mN-m)')
 plt.plot(cont["time"],cont["torque commands_0"]*1000)
+plt.xlabel(xlabel)
 plt.subplot(3,1,2)
 plt.plot(cont["time"],cont["torque commands_1"]*1000)
+plt.xlabel(xlabel)
 plt.subplot(3,1,3)
 plt.plot(cont["time"],cont["torque commands_2"]*1000)
-plt.title('Torque Commands from PD Control Law (mN-m)')
+plt.xlabel(xlabel)
 
+upper = 0.08
+lower = -1*upper
+
+f4 = plt.figure(4)
+plt.subplot(3,1,1)
+plt.title('Attitude Estimation Error and 3-sigma Covariance')
+plt.plot(sim_time,mrp_error_0,label='Error')
+plt.plot(sim_time,Nav_cov_p_0,'r',label='+3 sigma')
+plt.plot(sim_time,Nav_cov_n_0,'r',label='-3 sigma')
+plt.legend()
+plt.ylabel('MRP_0')
+plt.xlabel(xlabel)
+plt.ylim(lower,upper)
+plt.subplot(3,1,2)
+plt.plot(sim_time,mrp_error_1,label='Error')
+plt.plot(sim_time,Nav_cov_p_1,'r',label='+3 sigma')
+plt.plot(sim_time,Nav_cov_n_1,'r',label='-3 sigma')
+plt.legend()
+plt.ylabel('MRP_1')
+plt.xlabel(xlabel)
+plt.ylim(lower,upper)
+plt.subplot(3,1,3)
+plt.plot(sim_time,mrp_error_2,label='Error')
+plt.plot(sim_time,Nav_cov_p_2,'r',label='+3 sigma')
+plt.plot(sim_time,Nav_cov_n_2,'r',label='-3 sigma')
+plt.legend()
+plt.ylabel('MRP_2')
+plt.xlabel(xlabel)
+plt.ylim(lower,upper)
 plt.show()
 
