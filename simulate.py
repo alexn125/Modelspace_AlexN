@@ -359,27 +359,27 @@ while not exc.isTerminated():
     elif GNCstart: # runs GNC loop for every step now that gps measurements have populated
         sunout = sun_sens.outputs.pos_tgt_ref__out()
         triad.inputs.desired_secondary(CartesianVector3([-1*sunout.get(0),-1*sunout.get(1),-1*sunout.get(2)]))
+        if not navonly:
+            # Rough estimate of velocity from GPS position measurements (finite difference)
+            vel_est = (gps_pos_k - gps_pos_km1)/(1/sim_rate)
 
-        # Rough estimate of velocity from GPS position measurements (finite difference)
-        vel_est = (gps_pos_k - gps_pos_km1)/(1/sim_rate)
+            # estimated angular momentum unit vector of orbit
+            rnorm = gps_pos_k/np.linalg.norm(gps_pos_k)
+            velnorm = vel_est/np.linalg.norm(vel_est)
+            hhat = np.cross(rnorm, velnorm)
 
-        # estimated angular momentum unit vector of orbit
-        rnorm = gps_pos_k/np.linalg.norm(gps_pos_k)
-        velnorm = vel_est/np.linalg.norm(vel_est)
-        hhat = np.cross(rnorm, velnorm)
+            # estimated desired angular velocity of orbit (assuming circular orbit, in the inertial frame)
+            # mag = (2*math.pi)/period
+            # w_des_inertial = mag*hhat
+            w_des_inertial = meanmot*hhat
+            est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM() # inertial = DCM * body
+            DCMn = np.array([[est_att.get(0,0), est_att.get(0,1), est_att.get(0,2)],
+                            [est_att.get(1,0), est_att.get(1,1), est_att.get(1,2)],
+                            [est_att.get(2,0), est_att.get(2,1), est_att.get(2,2)]])
+            DCMt = np.transpose(DCMn) # body = DCMtranspose * inertial
+            w_des = DCMt @ w_des_inertial # desired angular velocity in body frame
 
-        # estimated desired angular velocity of orbit (assuming circular orbit, in the inertial frame)
-        # mag = (2*math.pi)/period
-        # w_des_inertial = mag*hhat
-        w_des_inertial = meanmot*hhat
-        est_att = ekf_meas.outputs.att_plus_mrp_body_inertial().toDCM() # inertial = DCM * body
-        DCMn = np.array([[est_att.get(0,0), est_att.get(0,1), est_att.get(0,2)],
-                        [est_att.get(1,0), est_att.get(1,1), est_att.get(1,2)],
-                        [est_att.get(2,0), est_att.get(2,1), est_att.get(2,2)]])
-        DCMt = np.transpose(DCMn) # body = DCMtranspose * inertial
-        w_des = DCMt @ w_des_inertial # desired angular velocity in body frame
-        
-        pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
+            pd.inputs.cmd_ang_vel(CartesianVector3([w_des[0],w_des[1],w_des[2]]))
 
     exc.step() # <---------------- ACTUALLY STEPS THE SIMULATION!
 
