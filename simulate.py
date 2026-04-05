@@ -46,7 +46,7 @@ os.system('cls' if os.name == 'nt' else 'clear')
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
 
 sim_rate = 1 # Hz
-sim_length = 3600 # seconds
+sim_length = 10 # seconds
 
 ## Simulation Executive
 exc = SimulationExecutive()
@@ -384,7 +384,8 @@ while not exc.isTerminated():
     exc.step() # <---------------- ACTUALLY STEPS THE SIMULATION!
 
     # The following ifs are to generate two GPS measurements for the velocity measurement in control step
-
+    cm = np.array([ekf_prop.outputs.cov_update().get(0,0), ekf_prop.outputs.cov_update().get(1,1), ekf_prop.outputs.cov_update().get(2,2)])
+    print(cm)
     if second_step:
         gps_pos_km1 = gps_pos_k
         gps_pos_k = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
@@ -397,4 +398,4 @@ while not exc.isTerminated():
 
     if not first_step and not second_step:
         gps_pos_k = np.array([erf_sens.outputs.pos_tgt_ref__out().get(0), erf_sens.outputs.pos_tgt_ref__out().get(1), erf_sens.outputs.pos_tgt_ref__out().get(2)])
-        GNCstart = True
+        GNCstart = True    
