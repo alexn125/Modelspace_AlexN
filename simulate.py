@@ -46,7 +46,7 @@ os.system('cls' if os.name == 'nt' else 'clear')
 "Overall Simulation Setup ------------------------------------------------------------------------------------------------------"
 
 sim_rate = 1 # Hz
-sim_length = 10 # seconds
+sim_length = 3600 # seconds
 
 ## Simulation Executive
 exc = SimulationExecutive()
@@ -55,7 +55,7 @@ exc.setRateHz(sim_rate)
 exc.end(sim_length)
 # exc.end(100.0)
 
-navonly = False
+navonly = True
 
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
