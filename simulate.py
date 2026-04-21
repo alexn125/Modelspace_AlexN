@@ -55,7 +55,7 @@ exc.setRateHz(sim_rate)
 exc.end(sim_length)
 # exc.end(100.0)
 
-navonly = True
+navonly = False
 
 ## Create Planet and Sun
 earth = SpicePlanet(exc, "earth")
@@ -105,7 +105,7 @@ with open('INIT_TLE.txt','r') as f:
 ## Calculate remaining elements
 semimajoraxis = (earth.outputs.mu()/(meanmot*meanmot))**(1/3)
 period = 2*math.pi*math.sqrt((semimajoraxis**3)/earth.outputs.mu())
-
+ 
 ## Newton-Raphson to calculate eccentric anomaly
 max_iterations = 100
 tolerance = 1e-14
